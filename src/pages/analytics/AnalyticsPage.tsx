@@ -23,7 +23,8 @@ export function AnalyticsPage() {
       data.forEach((f) => {
         const month = new Date(f.fecha).toLocaleString('es-CR', { month: 'short' })
         if (!byMonth[month]) byMonth[month] = {}
-        const tiendaNombre = (f.tienda as { nombre: string } | null)?.nombre ?? 'Tienda'
+        const tiendaData = f.tienda as unknown as { nombre: string } | null
+        const tiendaNombre = tiendaData?.nombre ?? 'Tienda'
         byMonth[month][tiendaNombre] = (byMonth[month][tiendaNombre] ?? 0) + f.total
       })
 
@@ -51,7 +52,7 @@ export function AnalyticsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
               <YAxis tickFormatter={(v) => formatCRC(v)} tick={{ fontSize: 11 }} width={90} />
-              <Tooltip formatter={(v: number) => formatCRC(v)} />
+              <Tooltip formatter={(v) => formatCRC(Number(v))} />
               <Legend />
               <Bar dataKey="Tienda Papá" fill="#4c6ef5" radius={[4, 4, 0, 0]} />
               <Bar dataKey="Tienda Mamá" fill="#f06595" radius={[4, 4, 0, 0]} />
