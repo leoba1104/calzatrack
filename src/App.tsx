@@ -37,7 +37,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function GuestGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
 
-  if (isLoading) return null
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
+      </div>
+    )
+  }
   if (user) return <Navigate to="/" replace />
   return <>{children}</>
 }

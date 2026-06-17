@@ -7,7 +7,15 @@
     <title>CalzaTrack</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-msg" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f9fafb;font-family:sans-serif">
+        <div style="text-align:center;color:#374151">
+          <div style="width:32px;height:32px;border:3px solid #4c6ef5;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 12px"></div>
+          <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+          <p style="margin:0;font-size:14px">Cargando CalzaTrack...</p>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

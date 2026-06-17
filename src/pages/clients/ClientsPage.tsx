@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Users, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Search, Users, Pencil, Trash } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { formatDate } from '@/lib/utils'
@@ -103,7 +103,7 @@ export function ClientsPage() {
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => setDeleting(c)} className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors">
-                          <Trash2 className="w-4 h-4" />
+                          <Trash className="w-4 h-4" />
                         </button>
                       </div>
                     </td>

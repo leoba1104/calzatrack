@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Plus, Trash2, ShoppingCart } from 'lucide-react'
+import { Search, Plus, Trash, ShoppingCart } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -19,7 +19,7 @@ const headerSchema = z.object({
   metodo_pago: z.enum(['efectivo', 'tarjeta', 'sinpe', 'transferencia', 'otro'], {
     message: 'Seleccione un método de pago',
   }),
-  descuento: z.number({ invalid_type_error: 'Ingrese un monto válido' }).min(0),
+  descuento: z.number({ error: 'Ingrese un monto válido' }).min(0),
   notas: z.string().optional(),
 })
 
@@ -310,7 +310,7 @@ export function InvoiceModal({ isOpen, onClose }: InvoiceModalProps) {
                       </div>
                       <div className="col-span-1 flex justify-end">
                         <button type="button" onClick={() => removeItem(idx)} className="text-gray-300 hover:text-red-500 transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
