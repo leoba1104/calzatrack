@@ -62,13 +62,18 @@ export function useAuth() {
     reset()
   }
 
+  const rol = profile?.rol
+
   return {
     user,
     session,
     profile,
     activeTienda,
     isLoading,
-    isAdmin: profile?.rol === 'admin',
+    isAdmin:    rol === 'admin',
+    isOwner:    rol === 'owner',
+    isEmployee: rol === 'employee',
+    canManage:  rol === 'admin' || rol === 'owner',
     signIn,
     signOut,
     setActiveTienda,

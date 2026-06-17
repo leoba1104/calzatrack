@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'vendedor'
+export type UserRole = 'admin' | 'owner' | 'employee'
 
 export type ProductoGenero = 'hombre' | 'mujer' | 'nino' | 'nina' | 'unisex'
 

@@ -33,3 +33,6 @@ dist-ssr
 
 # Vite temp files
 vite.config.ts.timestamp-*.mjs
+
+# Claude Code
+.claude/
