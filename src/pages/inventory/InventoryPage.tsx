@@ -218,14 +218,14 @@ export function InventoryPage() {
 
       <div className="bg-white rounded-xl border border-gray-200">
         {/* Filters row */}
-        <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
-          {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+          {/* Search — ancho fijo para no desplazar el resto */}
+          <div className="relative w-56 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nombre, marca o SKU..."
+              placeholder="Nombre, marca o SKU..."
               className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
             />
           </div>
@@ -274,16 +274,19 @@ export function InventoryPage() {
             ))}
           </div>
 
-          {/* Clear */}
-          {(hasFilters || search) && (
-            <button
-              onClick={clearFilters}
-              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <X className="w-3.5 h-3.5" />
-              Limpiar
-            </button>
-          )}
+          {/* Limpiar — siempre reserva su espacio para no mover el layout */}
+          <button
+            onClick={clearFilters}
+            className={cn(
+              'flex items-center gap-1.5 text-sm px-2 py-1.5 rounded-lg transition-colors shrink-0',
+              (hasFilters || search)
+                ? 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                : 'invisible pointer-events-none'
+            )}
+          >
+            <X className="w-3.5 h-3.5" />
+            Limpiar
+          </button>
         </div>
 
         <div className="overflow-x-auto">

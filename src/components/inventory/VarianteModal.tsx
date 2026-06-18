@@ -10,24 +10,18 @@ import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
 import type { VarianteProducto } from '@/types'
 
-const createSchema = z.object({
-  sku: z.string().min(1, 'SKU requerido'),
-  talla: z.string().optional(),
-  color: z.string().optional(),
-  precio: z.number({ error: 'Precio requerido' }).min(1, 'Precio debe ser mayor a 0'),
+// Single schema covering both create and edit — stock_inicial for new, stock for edit.
+const schema = z.object({
+  sku:           z.string().min(1, 'SKU requerido'),
+  talla:         z.string().optional(),
+  color:         z.string().optional(),
+  precio:        z.number({ error: 'Precio requerido' }).min(1, 'Precio debe ser mayor a 0'),
   stock_inicial: z.number().min(0).default(0),
-  activo: z.boolean().default(true),
+  stock:         z.number().min(0, 'Stock debe ser ≥ 0').default(0),
+  activo:        z.boolean().default(true),
 })
 
-const editSchema = z.object({
-  sku: z.string().min(1, 'SKU requerido'),
-  talla: z.string().optional(),
-  color: z.string().optional(),
-  precio: z.number({ error: 'Precio requerido' }).min(1, 'Precio debe ser mayor a 0'),
-  activo: z.boolean().default(true),
-})
-
-type CreateData = z.infer<typeof createSchema>
+type FormData = z.infer<typeof schema>
 
 interface VarianteModalProps {
   isOpen: boolean
@@ -42,47 +36,54 @@ export function VarianteModal({ isOpen, onClose, productoId, productoNombre, var
   const { activeTienda } = useAuth()
   const isEditing = !!variante
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<CreateData>({
-    resolver: zodResolver(isEditing ? editSchema : createSchema) as never,
-    defaultValues: {
-      sku: '',
-      talla: '',
-      color: '',
-      precio: 0,
-      stock_inicial: 0,
-      activo: true,
-    },
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema) as never,
+    defaultValues: { sku: '', talla: '', color: '', precio: 0, stock_inicial: 0, stock: 0, activo: true },
   })
 
   useEffect(() => {
     if (isOpen) {
       reset(isEditing ? {
-        sku: variante.sku,
-        talla: variante.talla ?? '',
-        color: variante.color ?? '',
+        sku:    variante.sku,
+        talla:  variante.talla ?? '',
+        color:  variante.color ?? '',
         precio: variante.precio,
+        stock:  variante.stock ?? 0,
+        stock_inicial: 0,
         activo: variante.activo,
-      } : { sku: '', talla: '', color: '', precio: 0, stock_inicial: 0, activo: true })
+      } : {
+        sku: '', talla: '', color: '', precio: 0, stock_inicial: 0, stock: 0, activo: true,
+      })
     }
   }, [isOpen, variante, isEditing, reset])
 
   const mutation = useMutation({
-    mutationFn: async (data: CreateData) => {
+    mutationFn: async (data: FormData) => {
       if (isEditing) {
         const { error } = await supabase.from('variantes_producto').update({
-          sku: data.sku,
-          talla: data.talla || null,
-          color: data.color || null,
+          sku:    data.sku,
+          talla:  data.talla || null,
+          color:  data.color || null,
           precio: data.precio,
           activo: data.activo,
         }).eq('id', variante.id)
         if (error) throw error
+
+        // Update stock in inventario_tienda
+        if (activeTienda) {
+          const { error: stockErr } = await supabase.from('inventario_tienda').upsert({
+            tienda_id:   activeTienda.id,
+            variante_id: variante.id,
+            stock:       data.stock,
+          }, { onConflict: 'tienda_id,variante_id' })
+          if (stockErr) throw stockErr
+        }
       } else {
         const { data: newVar, error } = await supabase.from('variantes_producto').insert({
           producto_id: productoId,
-          sku: data.sku,
-          talla: data.talla || null,
-          color: data.color || null,
+          sku:    data.sku,
+          talla:  data.talla || null,
+          color:  data.color || null,
           precio: data.precio,
           activo: data.activo,
         }).select('id').single()
@@ -90,9 +91,9 @@ export function VarianteModal({ isOpen, onClose, productoId, productoNombre, var
 
         if (data.stock_inicial > 0 && activeTienda && newVar) {
           const { error: stockErr } = await supabase.from('inventario_tienda').insert({
-            tienda_id: activeTienda.id,
+            tienda_id:   activeTienda.id,
             variante_id: newVar.id,
-            stock: data.stock_inicial,
+            stock:       data.stock_inicial,
           })
           if (stockErr) throw stockErr
         }
@@ -119,7 +120,7 @@ export function VarianteModal({ isOpen, onClose, productoId, productoNombre, var
       onClose={onClose}
       title={isEditing ? `Editar variante — ${productoNombre}` : `Nueva variante — ${productoNombre}`}
     >
-      <form noValidate onSubmit={handleSubmit((d) => mutation.mutate(d as CreateData))} className="p-6 space-y-4">
+      <form noValidate onSubmit={handleSubmit((d) => mutation.mutate(d))} className="p-6 space-y-4">
         <FormField label="SKU" required error={errors.sku?.message}>
           <input {...register('sku')} className={inputClass(!!errors.sku)} placeholder="NIKE-TCB-38" />
         </FormField>
@@ -144,7 +145,18 @@ export function VarianteModal({ isOpen, onClose, productoId, productoNombre, var
           />
         </FormField>
 
-        {!isEditing && (
+        {isEditing ? (
+          <FormField label={`Stock en ${activeTienda?.nombre ?? 'esta tienda'}`} error={errors.stock?.message}>
+            <input
+              {...register('stock', { valueAsNumber: true })}
+              type="number"
+              min="0"
+              step="1"
+              className={inputClass(!!errors.stock)}
+              placeholder="0"
+            />
+          </FormField>
+        ) : (
           <FormField label={`Stock inicial en ${activeTienda?.nombre ?? 'esta tienda'}`}>
             <input
               {...register('stock_inicial', { valueAsNumber: true })}
