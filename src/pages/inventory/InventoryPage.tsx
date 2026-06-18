@@ -1,12 +1,13 @@
 import { useState, useMemo, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Package, Pencil, ChevronDown, ChevronRight, Trash2, X } from 'lucide-react'
+import { Plus, Search, Package, Pencil, ChevronDown, ChevronRight, Trash2, X, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, cn } from '@/lib/utils'
 import { ProductModal } from '@/components/inventory/ProductModal'
 import { VarianteModal } from '@/components/inventory/VarianteModal'
+import { BulkImportModal } from '@/components/inventory/BulkImportModal'
 import type { Producto, VarianteProducto } from '@/types'
 
 interface VarianteConStock extends VarianteProducto {
@@ -48,6 +49,7 @@ export function InventoryPage() {
   const [editingProducto, setEditingProducto] = useState<Producto | null>(null)
   const [varianteModal, setVarianteModal] = useState<{ productoId: string; productoNombre: string; variante: VarianteConStock | null } | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null)
+  const [bulkImportOpen, setBulkImportOpen] = useState(false)
 
   const { data: inventario, isLoading } = useQuery({
     queryKey: ['inventario', activeTienda?.id],
@@ -200,13 +202,22 @@ export function InventoryPage() {
           <p className="text-sm text-gray-500 mt-1">{activeTienda?.nombre}</p>
         </div>
         {canManage && (
-          <button
-            onClick={openCreateProducto}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo producto
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setBulkImportOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors bg-white"
+            >
+              <Upload className="w-4 h-4" />
+              Importar CSV
+            </button>
+            <button
+              onClick={openCreateProducto}
+              className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Nuevo producto
+            </button>
+          </div>
         )}
       </div>
 
@@ -509,6 +520,8 @@ export function InventoryPage() {
           )}
         </div>
       </div>
+
+      <BulkImportModal isOpen={bulkImportOpen} onClose={() => setBulkImportOpen(false)} />
 
       <ProductModal isOpen={productModal} onClose={closeProductModal} producto={editingProducto} />
 
