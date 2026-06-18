@@ -11,12 +11,13 @@ import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
+import { PhoneInput, crPhoneSchema } from '@/components/ui/PhoneInput'
 import type { Empleado } from '@/types'
 
 const schema = z.object({
   nombre:    z.string().min(1, 'Nombre requerido'),
   apellido:  z.string().optional(),
-  telefono:  z.string().optional(),
+  telefono:  z.string().regex(crPhoneSchema, 'Debe ser XXXX-XXXX').optional().or(z.literal('')),
   email:     z.string().email('Email inválido').optional().or(z.literal('')),
   tienda_id: z.string().min(1, 'Tienda requerida'),
 })
@@ -102,7 +103,7 @@ function EmpleadoModal({ isOpen, onClose, empleado }: EmpleadoModalProps) {
 
         <div className="grid grid-cols-2 gap-4">
           <FormField label="Teléfono" error={errors.telefono?.message}>
-            <input {...register('telefono')} className={inputClass(!!errors.telefono)} placeholder="8888-0000" />
+            <PhoneInput {...register('telefono')} className={inputClass(!!errors.telefono)} />
           </FormField>
           <FormField label="Correo electrónico" error={errors.email?.message}>
             <input {...register('email')} type="email" className={inputClass(!!errors.email)} placeholder="mariana@ejemplo.com" />

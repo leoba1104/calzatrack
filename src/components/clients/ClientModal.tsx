@@ -7,12 +7,13 @@ import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
+import { PhoneInput, crPhoneSchema } from '@/components/ui/PhoneInput'
 import type { Cliente } from '@/types'
 
 const schema = z.object({
   nombre: z.string().min(1, 'Nombre requerido'),
   apellido: z.string().optional(),
-  telefono: z.string().optional(),
+  telefono: z.string().regex(crPhoneSchema, 'Debe ser XXXX-XXXX').optional().or(z.literal('')),
   email: z.string().email('Correo inválido').optional().or(z.literal('')),
   identificacion_fiscal: z.string().optional(),
   notas: z.string().optional(),
@@ -86,7 +87,7 @@ export function ClientModal({ isOpen, onClose, cliente }: ClientModalProps) {
         </div>
 
         <FormField label="Teléfono" error={errors.telefono?.message}>
-          <input {...register('telefono')} className={inputClass()} placeholder="8888-8888" />
+          <PhoneInput {...register('telefono')} className={inputClass(!!errors.telefono)} />
         </FormField>
 
         <FormField label="Correo electrónico" error={errors.email?.message}>
