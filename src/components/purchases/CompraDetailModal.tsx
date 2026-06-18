@@ -1,8 +1,4 @@
-import { useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Printer, Upload, ImageIcon, Loader2 } from 'lucide-react'
-import toast from 'react-hot-toast'
-import { supabase } from '@/lib/supabase'
+import { Printer } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
 import type { Compra, DetalleCompra } from '@/types'
@@ -69,7 +65,7 @@ function printCompra(compra: Compra) {
 </html>`
 
   const win = window.open('', '_blank')
-  if (!win) { toast.error('Activa las ventanas emergentes para imprimir'); return }
+  if (!win) { alert('Activa las ventanas emergentes para imprimir'); return }
   win.document.write(html)
   win.document.close()
   win.focus()
@@ -96,55 +92,6 @@ const estadoLabel: Record<Compra['estado'], string> = {
 }
 
 export function CompraDetailModal({ compra, isOpen, onClose }: CompraDetailModalProps) {
-  const qc = useQueryClient()
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [preview, setPreview] = useState<string | null>(null)
-
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      if (!compra) return
-      const ext  = file.name.split('.').pop()
-      const path = `${compra.id}.${ext}`
-
-      const { error: upErr } = await supabase.storage
-        .from('facturas-compra')
-        .upload(path, file, { upsert: true })
-      if (upErr) throw upErr
-
-      const { data: urlData } = supabase.storage.from('facturas-compra').getPublicUrl(path)
-      const url = urlData.publicUrl
-
-      const { error: dbErr } = await supabase
-        .from('compras')
-        .update({ factura_imagen_url: url })
-        .eq('id', compra.id)
-      if (dbErr) throw dbErr
-
-      return url
-    },
-    onSuccess: (url) => {
-      qc.invalidateQueries({ queryKey: ['compras'] })
-      if (url) setPreview(url)
-      toast.success('Imagen subida correctamente')
-    },
-    onError: (e: Error) => {
-      if (e.message?.includes('Bucket not found')) {
-        toast.error('Crea el bucket "facturas-compra" en Supabase Storage primero')
-      } else {
-        toast.error('Error al subir la imagen')
-      }
-    },
-  })
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const objectUrl = URL.createObjectURL(file)
-    setPreview(objectUrl)
-    uploadMutation.mutate(file)
-    e.target.value = ''
-  }
-
   if (!compra) return null
 
   const proveedor = (compra.proveedor as { nombre_empresa: string } | undefined)?.nombre_empresa
@@ -152,8 +99,6 @@ export function CompraDetailModal({ compra, isOpen, onClose }: CompraDetailModal
     variante?: { sku: string; talla: string | null; color: string | null } | null
     producto?: { nombre: string } | null
   })[]
-
-  const imageUrl = preview ?? compra.factura_imagen_url
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Detalle de compra" size="xl">
@@ -182,40 +127,19 @@ export function CompraDetailModal({ compra, isOpen, onClose }: CompraDetailModal
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {/* Invoice image */}
-          <div className="px-6 py-4 border-b border-gray-100">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Imagen de la factura original</p>
-            {imageUrl ? (
-              <div className="relative inline-block">
-                <a href={imageUrl} target="_blank" rel="noreferrer">
-                  <img
-                    src={imageUrl}
-                    alt="Factura original"
-                    className="max-h-48 rounded-xl border border-gray-200 object-contain hover:opacity-90 transition-opacity cursor-zoom-in"
-                  />
-                </a>
-                <button
-                  onClick={() => { setPreview(null); fileRef.current?.click() }}
-                  className="absolute top-2 right-2 p-1 bg-white rounded-lg border border-gray-200 text-gray-500 hover:text-gray-800 transition-colors shadow-sm"
-                  title="Cambiar imagen"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={uploadMutation.isPending}
-                className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50 transition-all disabled:opacity-60"
-              >
-                {uploadMutation.isPending
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Subiendo...</>
-                  : <><ImageIcon className="w-4 h-4" /> Subir foto de la factura</>
-                }
-              </button>
-            )}
-            <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} />
-          </div>
+          {/* Invoice image — view only */}
+          {compra.factura_imagen_url && (
+            <div className="px-6 py-4 border-b border-gray-100">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Factura original</p>
+              <a href={compra.factura_imagen_url} target="_blank" rel="noreferrer">
+                <img
+                  src={compra.factura_imagen_url}
+                  alt="Factura original"
+                  className="max-h-52 rounded-xl border border-gray-200 object-contain hover:opacity-90 transition-opacity cursor-zoom-in"
+                />
+              </a>
+            </div>
+          )}
 
           {/* Line items */}
           <div className="px-6 py-4">
