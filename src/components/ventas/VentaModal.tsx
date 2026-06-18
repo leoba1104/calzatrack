@@ -15,12 +15,13 @@ import type { Cliente, Empleado, VentaEstado, MetodoPago } from '@/types'
 const IVA = 0.13
 
 const headerSchema = z.object({
-  cliente_id: z.string().optional(),
+  cliente_id:  z.string().optional(),
   empleado_id: z.string().optional(),
-  estado: z.enum(['borrador', 'apartado', 'credito', 'pagada', 'anulada']).default('pagada'),
-  metodo_pago: z.enum(['efectivo', 'tarjeta', 'sinpe', 'transferencia', 'otro']).optional(),
-  descuento: z.number().min(0).default(0),
-  notas: z.string().optional(),
+  estado:      z.enum(['borrador', 'apartado', 'credito', 'pagada', 'anulada']).default('pagada'),
+  // z.enum rechaza "" (cadena vacía del <select>); validamos el valor real en la mutación
+  metodo_pago: z.string().optional(),
+  descuento:   z.number().min(0).default(0),
+  notas:       z.string().optional(),
 })
 
 type HeaderData = z.infer<typeof headerSchema>
