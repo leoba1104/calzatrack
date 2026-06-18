@@ -11,14 +11,11 @@ import {
   LogOut,
   ChevronUp,
   Check,
-  Sun,
-  Moon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
-import { useTheme } from '@/hooks/useTheme'
 import { supabase } from '@/lib/supabase'
 import type { UserRole, Tienda } from '@/types'
 
@@ -39,15 +36,8 @@ const navItems: NavItem[] = [
   { to: '/analiticas', label: 'Analíticas', icon: BarChart3, allowedRoles: ['admin', 'owner'] },
 ]
 
-const rolLabel: Record<UserRole, string> = {
-  admin:    'Administrador',
-  owner:    'Dueño',
-  employee: 'Empleado',
-}
-
 export function Sidebar() {
   const { profile, activeTienda, isAdmin, setActiveTienda, signOut } = useAuth()
-  const { isDark, toggleTheme } = useTheme()
   const [storeOpen, setStoreOpen] = useState(false)
 
   const { data: tiendas } = useQuery({
@@ -60,41 +50,22 @@ export function Sidebar() {
   })
 
   const visibleItems = navItems.filter(
-    ({ allowedRoles }) => !allowedRoles || (profile?.rol && allowedRoles.includes(profile.rol as UserRole))
+    ({ allowedRoles }) =>
+      !allowedRoles || (profile?.rol && allowedRoles.includes(profile.rol as UserRole))
   )
 
-  const displayName = profile
-    ? [profile.nombre, profile.apellido].filter(Boolean).join(' ')
-    : 'Usuario'
-
-  const rolText = profile?.rol ? (rolLabel[profile.rol as UserRole] ?? profile.rol) : ''
   const canSwitchStore = isAdmin && tiendas && tiendas.length > 1
 
   return (
     <aside className="w-64 flex flex-col shrink-0 bg-[#160829]">
 
-      {/* Logo + user */}
-      <div className="px-5 pt-5 pb-4">
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center shrink-0">
-            <Footprints className="w-4 h-4 text-white" />
-          </div>
-          <span className="text-[15px] font-bold text-white tracking-tight">CalzaTrack</span>
+      {/* Logo */}
+      <div className="flex items-center gap-2.5 px-5 pt-6 pb-5">
+        <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center shrink-0">
+          <Footprints className="w-4 h-4 text-white" />
         </div>
-
-        {/* User mini-profile */}
-        <div className="flex items-center gap-2.5 px-1">
-          <div className="w-7 h-7 rounded-full bg-brand-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
-            {displayName.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-white truncate leading-tight">{displayName}</p>
-            {rolText && <p className="text-[10px] text-purple-400 leading-tight">{rolText}</p>}
-          </div>
-        </div>
+        <span className="text-[15px] font-bold text-white tracking-tight">CalzaTrack</span>
       </div>
-
-      <div className="mx-3 mb-3 border-t border-white/10" />
 
       {/* Nav */}
       <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
@@ -121,7 +92,7 @@ export function Sidebar() {
       {/* Bottom section */}
       <div className="p-3 border-t border-white/10 space-y-2">
 
-        {/* Store switcher — opens UPWARD */}
+        {/* Store switcher — dropdown opens upward */}
         {activeTienda && (
           <div className="relative">
             <button
@@ -145,7 +116,6 @@ export function Sidebar() {
               </div>
             </button>
 
-            {/* Dropdown opens upward */}
             {canSwitchStore && storeOpen && (
               <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#1e0a35] border border-white/10 rounded-xl shadow-xl overflow-hidden z-50">
                 {tiendas!.map((tienda) => (
@@ -168,24 +138,14 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* Dark mode toggle + logout */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={toggleTheme}
-            className="flex items-center justify-center w-9 h-9 rounded-xl text-purple-400 hover:bg-white/5 hover:text-white transition-all"
-            title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-          >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-
-          <button
-            onClick={signOut}
-            className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-purple-400 hover:text-white hover:bg-white/5 transition-all duration-150"
-          >
-            <LogOut className="w-4 h-4" />
-            Cerrar sesión
-          </button>
-        </div>
+        {/* Logout */}
+        <button
+          onClick={signOut}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-purple-400 hover:text-white hover:bg-white/5 transition-all duration-150"
+        >
+          <LogOut className="w-4 h-4" />
+          Cerrar sesión
+        </button>
       </div>
     </aside>
   )
