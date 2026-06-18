@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, ShoppingCart, Eye, CheckCircle2, XCircle } from 'lucide-react'
+import { Plus, ShoppingCart, Eye, CheckCircle2, XCircle, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -20,9 +20,10 @@ export function PurchasesPage() {
   const { activeTienda, canManage } = useAuth()
   const qc = useQueryClient()
 
-  const [modalOpen, setModalOpen]       = useState(false)
-  const [detailCompra, setDetailCompra] = useState<Compra | null>(null)
-  const [confirmAnular, setConfirmAnular] = useState<string | null>(null)
+  const [modalOpen, setModalOpen]           = useState(false)
+  const [detailCompra, setDetailCompra]     = useState<Compra | null>(null)
+  const [confirmAnular, setConfirmAnular]   = useState<string | null>(null)
+  const [confirmEliminar, setConfirmEliminar] = useState<string | null>(null)
 
   const { data: compras, isLoading } = useQuery({
     queryKey: ['compras', activeTienda?.id],
@@ -47,28 +48,10 @@ export function PurchasesPage() {
   })
 
   const recibirCompra = useMutation({
-    mutationFn: async (compra: Compra) => {
-      if (!activeTienda) throw new Error('Sin tienda activa')
-
-      const { error } = await supabase.from('compras').update({ estado: 'recibida' }).eq('id', compra.id)
+    mutationFn: async (id: string) => {
+      // The DB trigger manage_stock_on_compra handles stock increment automatically
+      const { error } = await supabase.from('compras').update({ estado: 'recibida' }).eq('id', id)
       if (error) throw error
-
-      // Only update stock for items linked to an existing variant
-      const items = (compra.items ?? []).filter((it) => it.variante_id)
-      for (const item of items) {
-        const { data: row } = await supabase
-          .from('inventario_tienda')
-          .select('id, stock')
-          .eq('tienda_id', activeTienda.id)
-          .eq('variante_id', item.variante_id!)
-          .maybeSingle()
-
-        if (row) {
-          await supabase.from('inventario_tienda').update({ stock: row.stock + item.cantidad }).eq('id', row.id)
-        } else {
-          await supabase.from('inventario_tienda').insert({ tienda_id: activeTienda.id, variante_id: item.variante_id!, stock: item.cantidad })
-        }
-      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['compras'] })
@@ -85,10 +68,24 @@ export function PurchasesPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['compras'] })
+      qc.invalidateQueries({ queryKey: ['inventario'] })
       toast.success('Compra anulada')
       setConfirmAnular(null)
     },
     onError: () => toast.error('Error al anular la compra'),
+  })
+
+  const eliminarCompra = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('compras').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['compras'] })
+      toast.success('Compra eliminada')
+      setConfirmEliminar(null)
+    },
+    onError: () => toast.error('Error al eliminar la compra'),
   })
 
   return (
@@ -139,7 +136,8 @@ export function PurchasesPage() {
               {compras.map((c) => {
                 const badge     = estadoBadge[c.estado]
                 const proveedor = c.proveedor as { nombre_empresa: string } | null
-                const confirming = confirmAnular === c.id
+                const confirming         = confirmAnular === c.id
+                const confirmingEliminar = confirmEliminar === c.id
                 const itemCount  = c.items?.length ?? 0
 
                 return (
@@ -175,25 +173,20 @@ export function PurchasesPage() {
                         {confirming ? (
                           <>
                             <span className="text-xs text-gray-500 ml-1 mr-1">¿Anular?</span>
-                            <button
-                              onClick={() => anularCompra.mutate(c.id)}
-                              disabled={anularCompra.isPending}
-                              className="px-2 py-1 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-60 transition-colors"
-                            >
-                              Sí
-                            </button>
-                            <button
-                              onClick={() => setConfirmAnular(null)}
-                              className="px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                            >
-                              No
-                            </button>
+                            <button onClick={() => anularCompra.mutate(c.id)} disabled={anularCompra.isPending} className="px-2 py-1 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-60 transition-colors">Sí</button>
+                            <button onClick={() => setConfirmAnular(null)} className="px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">No</button>
+                          </>
+                        ) : confirmingEliminar ? (
+                          <>
+                            <span className="text-xs text-gray-500 ml-1 mr-1">¿Eliminar?</span>
+                            <button onClick={() => eliminarCompra.mutate(c.id)} disabled={eliminarCompra.isPending} className="px-2 py-1 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-60 transition-colors">Sí</button>
+                            <button onClick={() => setConfirmEliminar(null)} className="px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">No</button>
                           </>
                         ) : (
                           <>
                             {canManage && c.estado === 'pendiente' && (
                               <button
-                                onClick={() => recibirCompra.mutate(c)}
+                                onClick={() => recibirCompra.mutate(c.id)}
                                 disabled={recibirCompra.isPending}
                                 className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-green-700 border border-green-200 bg-green-50 rounded-lg hover:bg-green-100 disabled:opacity-60 transition-colors"
                               >
@@ -208,6 +201,15 @@ export function PurchasesPage() {
                               >
                                 <XCircle className="w-3.5 h-3.5" />
                                 Anular
+                              </button>
+                            )}
+                            {canManage && (
+                              <button
+                                onClick={() => setConfirmEliminar(c.id)}
+                                title="Eliminar compra"
+                                className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             )}
                           </>
