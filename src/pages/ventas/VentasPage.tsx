@@ -119,6 +119,7 @@ export function VentasPage() {
       return (data ?? []) as unknown as Venta[]
     },
     enabled: !!activeTienda,
+    staleTime: 0,
   })
 
   const anularMutation = useMutation({
