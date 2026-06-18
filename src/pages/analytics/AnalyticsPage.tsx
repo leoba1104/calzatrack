@@ -38,7 +38,7 @@ export function AnalyticsPage() {
     rawVentas.forEach((v) => {
       const month = new Date(v.fecha).toLocaleString('es-CR', { month: 'short' })
       if (!byMonth[month]) byMonth[month] = {}
-      const nombre = (v.tienda as { nombre: string } | null)?.nombre ?? 'Tienda'
+      const nombre = (v.tienda as unknown as { nombre: string } | null)?.nombre ?? 'Tienda'
       nameSet.add(nombre)
       byMonth[month][nombre] = (byMonth[month][nombre] ?? 0) + v.total
     })

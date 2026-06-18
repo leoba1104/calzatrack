@@ -110,7 +110,7 @@ export function VentaModal({ isOpen, onClose }: VentaModalProps) {
         `)
         .eq('tienda_id', activeTienda!.id)
         .gt('stock', 0)
-      return (data ?? []).filter((d) => (d.variante as DisponibleRow['variante'])?.activo) as DisponibleRow[]
+      return (data ?? []).filter((d) => (d.variante as unknown as DisponibleRow['variante'])?.activo) as unknown as DisponibleRow[]
     },
     enabled: isOpen && !!activeTienda,
   })

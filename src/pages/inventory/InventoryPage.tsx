@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Plus, Search, Package, Pencil, ChevronDown, ChevronRight } from 'lucide-react'
-import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, cn } from '@/lib/utils'
@@ -13,7 +12,16 @@ interface VarianteConStock extends VarianteProducto {
   stock: number
 }
 
-interface ProductoConVariantes extends Producto {
+interface ProductoConVariantes {
+  id: string
+  nombre: string
+  descripcion: string | null
+  activo: boolean
+  precio_base: number
+  categoria_id: string | null
+  marca_id: string | null
+  created_at: string
+  updated_at: string
   marca: { id: string; nombre: string } | null
   categoria: { id: string; nombre: string } | null
   variantes: VarianteConStock[]
@@ -22,7 +30,6 @@ interface ProductoConVariantes extends Producto {
 
 export function InventoryPage() {
   const { activeTienda, canManage } = useAuth()
-  const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [productModal, setProductModal] = useState(false)
@@ -65,7 +72,7 @@ export function InventoryPage() {
           ...p,
           variantes,
           totalStock: variantes.reduce((sum, v) => sum + v.stock, 0),
-        } as ProductoConVariantes
+        } as unknown as ProductoConVariantes
       })
     },
     enabled: !!activeTienda,
@@ -77,19 +84,10 @@ export function InventoryPage() {
     const q = search.toLowerCase()
     return inventario.filter((p) =>
       p.nombre.toLowerCase().includes(q) ||
-      (p.marca as { nombre: string } | null)?.nombre.toLowerCase().includes(q) ||
+      (p.marca as unknown as { nombre: string } | null)?.nombre.toLowerCase().includes(q) ||
       p.variantes.some((v) => v.sku.toLowerCase().includes(q))
     )
   }, [inventario, search])
-
-  const toggleActivo = useMutation({
-    mutationFn: async ({ id, activo }: { id: string; activo: boolean }) => {
-      const { error } = await supabase.from('productos').update({ activo: !activo }).eq('id', id)
-      if (error) throw error
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventario'] }),
-    onError: () => toast.error('Error al actualizar el producto'),
-  })
 
   function toggleExpand(id: string) {
     setExpanded((prev) => {
@@ -100,7 +98,7 @@ export function InventoryPage() {
   }
 
   function openCreateProducto() { setEditingProducto(null); setProductModal(true) }
-  function openEditProducto(p: Producto) { setEditingProducto(p); setProductModal(true) }
+  function openEditProducto(p: ProductoConVariantes) { setEditingProducto(p as unknown as Producto); setProductModal(true) }
   function closeProductModal() { setProductModal(false); setEditingProducto(null) }
 
   function openCreateVariante(p: ProductoConVariantes) {

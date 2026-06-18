@@ -47,7 +47,7 @@ export function VentasPage() {
       }
 
       const { data } = await query
-      return (data ?? []) as Venta[]
+      return (data ?? []) as unknown as Venta[]
     },
     enabled: !!activeTienda,
   })
