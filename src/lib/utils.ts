@@ -31,7 +31,3 @@ export function formatDateTime(dateString: string): string {
     minute: '2-digit',
   }).format(new Date(dateString))
 }
-
-export function generateFacturaNumber(tiendaPrefix: string, sequence: number): string {
-  return `${tiendaPrefix}-${String(sequence).padStart(5, '0')}`
-}

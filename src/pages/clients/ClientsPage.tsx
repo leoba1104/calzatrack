@@ -34,7 +34,7 @@ export function ClientsPage() {
       toast.success('Cliente eliminado')
       setDeleting(null)
     },
-    onError: () => toast.error('No se puede eliminar — el cliente tiene facturas asociadas'),
+    onError: () => toast.error('No se puede eliminar — el cliente tiene ventas asociadas'),
   })
 
   function openCreate() { setEditing(null); setModalOpen(true) }

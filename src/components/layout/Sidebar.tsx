@@ -25,7 +25,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { to: '/',           label: 'Dashboard',  icon: LayoutDashboard, end: true },
   { to: '/inventario', label: 'Inventario', icon: Package },
-  { to: '/facturas',   label: 'Facturas',   icon: FileText },
+  { to: '/ventas',     label: 'Ventas',     icon: FileText },
   { to: '/clientes',   label: 'Clientes',   icon: Users },
   { to: '/empleados',  label: 'Empleados',  icon: UserCog, allowedRoles: ['admin', 'owner'] },
   { to: '/analiticas', label: 'Analíticas', icon: BarChart3, allowedRoles: ['admin', 'owner'] },

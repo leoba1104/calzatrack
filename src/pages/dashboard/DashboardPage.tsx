@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { Package, FileText, Users, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Package, ShoppingCart, Users, AlertTriangle, TrendingUp } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC } from '@/lib/utils'
 
-interface StatCard {
+interface StatCardProps {
   label: string
   value: string | number
   icon: React.ElementType
@@ -12,7 +12,7 @@ interface StatCard {
   bg: string
 }
 
-function StatCard({ label, value, icon: Icon, color, bg }: StatCard) {
+function StatCard({ label, value, icon: Icon, color, bg }: StatCardProps) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-3">
@@ -34,20 +34,33 @@ export function DashboardPage() {
     queryFn: async () => {
       if (!activeTienda) return null
 
-      const [productosRes, clientesRes, facturasRes, stockBajoRes] = await Promise.all([
-        supabase.from('productos').select('id', { count: 'exact', head: true }).eq('tienda_id', activeTienda.id).eq('activo', true),
-        supabase.from('clientes').select('id', { count: 'exact', head: true }),
-        supabase.from('facturas').select('total').eq('tienda_id', activeTienda.id).eq('estado', 'pagada'),
-        supabase.from('productos').select('id', { count: 'exact', head: true }).eq('tienda_id', activeTienda.id).filter('stock', 'lte', 'stock_minimo'),
+      const [variantesRes, clientesRes, ventasRes, sinStockRes] = await Promise.all([
+        supabase
+          .from('inventario_tienda')
+          .select('id', { count: 'exact', head: true })
+          .eq('tienda_id', activeTienda.id),
+        supabase
+          .from('clientes')
+          .select('id', { count: 'exact', head: true }),
+        supabase
+          .from('ventas')
+          .select('total')
+          .eq('tienda_id', activeTienda.id)
+          .eq('estado', 'pagada'),
+        supabase
+          .from('inventario_tienda')
+          .select('id', { count: 'exact', head: true })
+          .eq('tienda_id', activeTienda.id)
+          .eq('stock', 0),
       ])
 
-      const totalVentas = facturasRes.data?.reduce((sum, f) => sum + f.total, 0) ?? 0
+      const totalVentas = ventasRes.data?.reduce((sum, v) => sum + v.total, 0) ?? 0
 
       return {
-        productos: productosRes.count ?? 0,
+        variantes: variantesRes.count ?? 0,
         clientes: clientesRes.count ?? 0,
         ventas: totalVentas,
-        stockBajo: stockBajoRes.count ?? 0,
+        sinStock: sinStockRes.count ?? 0,
       }
     },
     enabled: !!activeTienda,
@@ -64,8 +77,8 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          label="Productos activos"
-          value={stats?.productos ?? '—'}
+          label="Referencias en inventario"
+          value={stats?.variantes ?? '—'}
           icon={Package}
           color="text-blue-600"
           bg="bg-blue-50"
@@ -85,8 +98,8 @@ export function DashboardPage() {
           bg="bg-brand-50"
         />
         <StatCard
-          label="Stock bajo"
-          value={stats?.stockBajo ?? '—'}
+          label="Sin stock"
+          value={stats?.sinStock ?? '—'}
           icon={AlertTriangle}
           color="text-amber-600"
           bg="bg-amber-50"
@@ -95,11 +108,11 @@ export function DashboardPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-center gap-2 mb-1">
-          <FileText className="w-5 h-5 text-gray-400" />
+          <ShoppingCart className="w-5 h-5 text-gray-400" />
           <h2 className="font-semibold text-gray-800">Actividad reciente</h2>
         </div>
         <p className="text-sm text-gray-500">
-          Las últimas facturas y movimientos aparecerán aquí.
+          Las últimas ventas y movimientos aparecerán aquí.
         </p>
       </div>
     </div>

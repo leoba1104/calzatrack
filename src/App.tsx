@@ -6,7 +6,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { InventoryPage } from '@/pages/inventory/InventoryPage'
-import { InvoicesPage } from '@/pages/invoices/InvoicesPage'
+import { VentasPage } from '@/pages/ventas/VentasPage'
 import { ClientsPage } from '@/pages/clients/ClientsPage'
 import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage'
 import { EmployeesPage } from '@/pages/employees/EmployeesPage'
@@ -72,10 +72,12 @@ export default function App() {
           >
             <Route index element={<DashboardPage />} />
             <Route path="inventario" element={<InventoryPage />} />
-            <Route path="facturas" element={<InvoicesPage />} />
+            <Route path="ventas" element={<VentasPage />} />
             <Route path="clientes" element={<ClientsPage />} />
             <Route path="empleados" element={<EmployeesPage />} />
             <Route path="analiticas" element={<AnalyticsPage />} />
+            {/* Backward compat redirect */}
+            <Route path="facturas" element={<Navigate to="/ventas" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

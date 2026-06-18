@@ -14,6 +14,7 @@ const schema = z.object({
   apellido: z.string().optional(),
   telefono: z.string().optional(),
   email: z.string().email('Correo inválido').optional().or(z.literal('')),
+  identificacion_fiscal: z.string().optional(),
   notas: z.string().optional(),
 })
 
@@ -40,8 +41,9 @@ export function ClientModal({ isOpen, onClose, cliente }: ClientModalProps) {
         apellido: cliente.apellido ?? '',
         telefono: cliente.telefono ?? '',
         email: cliente.email ?? '',
+        identificacion_fiscal: cliente.identificacion_fiscal ?? '',
         notas: cliente.notas ?? '',
-      } : { nombre: '', apellido: '', telefono: '', email: '', notas: '' })
+      } : { nombre: '', apellido: '', telefono: '', email: '', identificacion_fiscal: '', notas: '' })
     }
   }, [isOpen, cliente, isEditing, reset])
 
@@ -52,6 +54,7 @@ export function ClientModal({ isOpen, onClose, cliente }: ClientModalProps) {
         apellido: data.apellido || null,
         telefono: data.telefono || null,
         email: data.email || null,
+        identificacion_fiscal: data.identificacion_fiscal || null,
         notas: data.notas || null,
       }
       if (isEditing) {
@@ -88,6 +91,10 @@ export function ClientModal({ isOpen, onClose, cliente }: ClientModalProps) {
 
         <FormField label="Correo electrónico" error={errors.email?.message}>
           <input {...register('email')} type="email" className={inputClass(!!errors.email)} placeholder="cliente@correo.com" />
+        </FormField>
+
+        <FormField label="Cédula / Identificación fiscal">
+          <input {...register('identificacion_fiscal')} className={inputClass()} placeholder="112345678" />
         </FormField>
 
         <FormField label="Notas" error={errors.notas?.message}>

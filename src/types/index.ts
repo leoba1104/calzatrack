@@ -1,8 +1,6 @@
 export type UserRole = 'admin' | 'owner' | 'employee'
 
-export type ProductoGenero = 'hombre' | 'mujer' | 'nino' | 'nina' | 'unisex'
-
-export type FacturaEstado = 'pendiente' | 'pagada' | 'cancelada' | 'anulada'
+export type VentaEstado = 'borrador' | 'apartado' | 'credito' | 'pagada' | 'anulada'
 
 export type MetodoPago = 'efectivo' | 'tarjeta' | 'sinpe' | 'transferencia' | 'otro'
 
@@ -12,6 +10,8 @@ export interface Tienda {
   descripcion: string | null
   direccion: string | null
   telefono: string | null
+  prefijo: string
+  activo: boolean
   created_at: string
 }
 
@@ -25,7 +25,24 @@ export interface Profile {
   created_at: string
 }
 
-export interface CategoriaProducto {
+export interface Empleado {
+  id: string
+  tienda_id: string | null
+  tienda?: Tienda
+  nombre: string
+  apellido: string | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Marca {
+  id: string
+  nombre: string
+  created_at: string
+}
+
+export interface Categoria {
   id: string
   nombre: string
   created_at: string
@@ -33,24 +50,37 @@ export interface CategoriaProducto {
 
 export interface Producto {
   id: string
-  tienda_id: string
-  tienda?: Tienda
-  codigo: string
   nombre: string
   descripcion: string | null
-  marca: string
   categoria_id: string | null
-  categoria?: CategoriaProducto
-  genero: ProductoGenero | null
-  talla: string | null
-  color: string | null
-  precio_costo: number
-  precio_venta: number
-  stock: number
-  stock_minimo: number
-  imagen_url: string | null
+  categoria?: Categoria
+  marca_id: string | null
+  marca?: Marca
+  precio_base: number
   activo: boolean
   created_at: string
+  updated_at: string
+}
+
+export interface VarianteProducto {
+  id: string
+  producto_id: string
+  producto?: Producto
+  sku: string
+  talla: string | null
+  color: string | null
+  precio: number
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface InventarioTienda {
+  id: string
+  tienda_id: string
+  variante_id: string
+  variante?: VarianteProducto
+  stock: number
   updated_at: string
 }
 
@@ -60,16 +90,17 @@ export interface Cliente {
   apellido: string | null
   telefono: string | null
   email: string | null
+  identificacion_fiscal: string | null
   notas: string | null
   created_at: string
   updated_at: string
 }
 
-export interface FacturaItem {
+export interface DetalleVenta {
   id: string
-  factura_id: string
-  producto_id: string
-  producto?: Producto
+  venta_id: string
+  variante_id: string
+  variante?: VarianteProducto
   cantidad: number
   precio_unitario: number
   descuento_item: number
@@ -77,32 +108,75 @@ export interface FacturaItem {
   created_at: string
 }
 
-export interface Factura {
+export interface PagoVenta {
   id: string
-  tienda_id: string
-  tienda?: Tienda
+  venta_id: string
+  empleado_id: string | null
+  empleado?: Empleado
+  fecha: string
+  monto: number
+  tipo_pago: MetodoPago
+  notas: string | null
+  created_at: string
+}
+
+export interface Venta {
+  id: string
+  numero_venta: string
+  fecha: string
   cliente_id: string | null
   cliente?: Cliente
-  numero_factura: string
-  fecha: string
+  tienda_id: string
+  tienda?: Tienda
+  empleado_id: string | null
+  empleado?: Empleado
+  estado: VentaEstado
   subtotal: number
   impuesto: number
   descuento: number
   total: number
-  estado: FacturaEstado
-  metodo_pago: MetodoPago | null
   notas: string | null
-  vendedor_id: string | null
-  vendedor?: Profile
-  items?: FacturaItem[]
+  pagos?: PagoVenta[]
+  items?: DetalleVenta[]
   created_at: string
   updated_at: string
 }
 
-export interface VentaResumen {
-  tienda_id: string
-  tienda_nombre: string
-  total_ventas: number
-  total_facturas: number
+export interface Proveedor {
+  id: string
+  nombre_empresa: string
+  telefono: string | null
+  email: string | null
+  contacto: string | null
+  notas: string | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface DetalleCompra {
+  id: string
+  compra_id: string
+  variante_id: string
+  variante?: VarianteProducto
+  cantidad: number
+  costo_unitario: number
+  subtotal: number
+  created_at: string
+}
+
+export interface Compra {
+  id: string
+  numero_factura_proveedor: string | null
   fecha: string
+  proveedor_id: string | null
+  proveedor?: Proveedor
+  tienda_id: string
+  tienda?: Tienda
+  estado: 'pendiente' | 'recibida' | 'anulada'
+  total_pagado: number
+  notas: string | null
+  items?: DetalleCompra[]
+  created_at: string
+  updated_at: string
 }
