@@ -270,7 +270,7 @@ export function VentaModal({ isOpen, onClose }: VentaModalProps) {
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Nueva venta" size="xl">
-      <form onSubmit={handleSubmit((d) => mutation.mutate(d as HeaderData))}>
+      <form noValidate onSubmit={handleSubmit((d) => mutation.mutate(d as HeaderData))}>
         <div className="p-6 grid grid-cols-2 gap-6">
 
           {/* Left column */}

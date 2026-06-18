@@ -76,7 +76,7 @@ export function ClientModal({ isOpen, onClose, cliente }: ClientModalProps) {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEditing ? 'Editar cliente' : 'Nuevo cliente'}>
-      <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="p-6 space-y-4">
+      <form noValidate onSubmit={handleSubmit((d) => mutation.mutate(d))} className="p-6 space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <FormField label="Nombre" required error={errors.nombre?.message}>
             <input {...register('nombre')} className={inputClass(!!errors.nombre)} placeholder="Juan" />

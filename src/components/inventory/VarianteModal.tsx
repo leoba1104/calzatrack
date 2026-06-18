@@ -119,7 +119,7 @@ export function VarianteModal({ isOpen, onClose, productoId, productoNombre, var
       onClose={onClose}
       title={isEditing ? `Editar variante — ${productoNombre}` : `Nueva variante — ${productoNombre}`}
     >
-      <form onSubmit={handleSubmit((d) => mutation.mutate(d as CreateData))} className="p-6 space-y-4">
+      <form noValidate onSubmit={handleSubmit((d) => mutation.mutate(d as CreateData))} className="p-6 space-y-4">
         <FormField label="SKU" required error={errors.sku?.message}>
           <input {...register('sku')} className={inputClass(!!errors.sku)} placeholder="NIKE-TCB-38" />
         </FormField>

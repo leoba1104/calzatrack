@@ -95,7 +95,7 @@ export function ProductModal({ isOpen, onClose, producto }: ProductModalProps) {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEditing ? 'Editar producto' : 'Nuevo producto'} size="md">
-      <form onSubmit={handleSubmit((d) => mutation.mutate(d as FormData))} className="p-6 space-y-4">
+      <form noValidate onSubmit={handleSubmit((d) => mutation.mutate(d as FormData))} className="p-6 space-y-4">
 
         <FormField label="Nombre" required error={errors.nombre?.message}>
           <input {...register('nombre')} className={inputClass(!!errors.nombre)} placeholder="Tenis Clásico Blanco" />

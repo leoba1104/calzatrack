@@ -46,7 +46,7 @@ export function LoginPage() {
             <p className="text-sm text-gray-500 mt-1">Sistema de gestión de calzado</p>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Correo electrónico
