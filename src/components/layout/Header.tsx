@@ -23,10 +23,7 @@ export function Header() {
 
   return (
     <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-6 shrink-0">
-      <div>
-        <p className="text-xs text-gray-400">Bienvenido de vuelta,</p>
-        <p className="text-[15px] font-semibold text-gray-900 leading-tight">{firstName}</p>
-      </div>
+      <div />
 
       {isAdmin && tiendas && tiendas.length > 1 && (
         <div className="relative">

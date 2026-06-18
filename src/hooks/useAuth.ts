@@ -34,19 +34,19 @@ export function useAuth() {
   }, [])
 
   async function fetchProfile(userId: string) {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('profiles')
       .select('*, tienda:tiendas(*)')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
-    if (!error && data) {
+    if (data) {
       setProfile(data as Profile)
       if (data.tienda && !activeTienda) {
-        setActiveTienda(data.tienda)
+        setActiveTienda(data.tienda as never)
       } else if (data.rol === 'admin') {
-        const { data: tiendas } = await supabase.from('tiendas').select('*').limit(1).single()
-        if (tiendas && !activeTienda) setActiveTienda(tiendas)
+        const { data: tienda } = await supabase.from('tiendas').select('*').limit(1).maybeSingle()
+        if (tienda && !activeTienda) setActiveTienda(tienda as never)
       }
     }
     setLoading(false)
