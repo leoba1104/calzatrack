@@ -153,14 +153,17 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
       )
       if (iErr) throw iErr
 
-      // 5. Upload invoice image if provided
+      // 5. Upload invoice image if provided (non-fatal: compra already saved)
       if (imageFile) {
-        const ext  = imageFile.name.split('.').pop()
+        const ext  = imageFile.name.split('.').pop() ?? 'jpg'
         const path = `${compra.id}.${ext}`
         const { error: upErr } = await supabase.storage
           .from('facturas-compra')
           .upload(path, imageFile, { upsert: true })
-        if (!upErr) {
+        if (upErr) {
+          console.error('[Storage 400]', upErr)
+          toast.error(`Imagen no subida: ${upErr.message}`)
+        } else {
           const { data: urlData } = supabase.storage.from('facturas-compra').getPublicUrl(path)
           await supabase.from('compras').update({ factura_imagen_url: urlData.publicUrl }).eq('id', compra.id)
         }
