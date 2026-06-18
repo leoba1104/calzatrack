@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Tienda } from '@/types'
 
 export function Header() {
-  const { profile, activeTienda, isAdmin, setActiveTienda } = useAuth()
+  const { activeTienda, isAdmin, setActiveTienda } = useAuth()
   const [storeOpen, setStoreOpen] = useState(false)
 
   const { data: tiendas } = useQuery({
@@ -18,8 +18,6 @@ export function Header() {
     },
     enabled: isAdmin,
   })
-
-  const firstName = profile?.nombre ?? 'Usuario'
 
   return (
     <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-6 shrink-0">
