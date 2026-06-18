@@ -226,6 +226,26 @@ export function VentasPage() {
                 })
               )}
             </tbody>
+            {ventas && ventas.length > 0 && (() => {
+              const totalGeneral = ventas
+                .filter(v => v.estado !== 'anulada')
+                .reduce((sum, v) => sum + v.total, 0)
+              const count = ventas.filter(v => v.estado !== 'anulada').length
+              const colSpan = canManage ? 3 : 3
+              return (
+                <tfoot>
+                  <tr className="bg-brand-50 border-t-2 border-brand-100">
+                    <td colSpan={colSpan} className="px-4 py-3 text-xs text-gray-500">
+                      {count} venta{count !== 1 ? 's' : ''} (excl. anuladas)
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-base text-brand-700">
+                      {formatCRC(totalGeneral)}
+                    </td>
+                    <td colSpan={canManage ? 3 : 2} />
+                  </tr>
+                </tfoot>
+              )
+            })()}
           </table>
         </div>
       </div>
