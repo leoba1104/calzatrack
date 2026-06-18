@@ -10,6 +10,8 @@ import { VentasPage } from '@/pages/ventas/VentasPage'
 import { ClientsPage } from '@/pages/clients/ClientsPage'
 import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage'
 import { EmployeesPage } from '@/pages/employees/EmployeesPage'
+import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
+import { PurchasesPage } from '@/pages/purchases/PurchasesPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,6 +77,8 @@ export default function App() {
             <Route path="ventas" element={<VentasPage />} />
             <Route path="clientes" element={<ClientsPage />} />
             <Route path="empleados" element={<EmployeesPage />} />
+            <Route path="proveedores" element={<SuppliersPage />} />
+            <Route path="compras" element={<PurchasesPage />} />
             <Route path="analiticas" element={<AnalyticsPage />} />
             {/* Backward compat redirect */}
             <Route path="facturas" element={<Navigate to="/ventas" replace />} />

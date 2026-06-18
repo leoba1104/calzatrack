@@ -11,6 +11,8 @@ import {
   LogOut,
   ChevronUp,
   Check,
+  Building2,
+  ShoppingCart,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -32,8 +34,10 @@ const navItems: NavItem[] = [
   { to: '/inventario', label: 'Inventario', icon: Package },
   { to: '/ventas',     label: 'Ventas',     icon: FileText },
   { to: '/clientes',   label: 'Clientes',   icon: Users },
-  { to: '/empleados',  label: 'Empleados',  icon: UserCog, allowedRoles: ['admin', 'owner'] },
-  { to: '/analiticas', label: 'Analíticas', icon: BarChart3, allowedRoles: ['admin', 'owner'] },
+  { to: '/empleados',   label: 'Empleados',   icon: UserCog,      allowedRoles: ['admin', 'owner'] },
+  { to: '/proveedores', label: 'Proveedores', icon: Building2,    allowedRoles: ['admin', 'owner'] },
+  { to: '/compras',     label: 'Compras',     icon: ShoppingCart, allowedRoles: ['admin', 'owner'] },
+  { to: '/analiticas',  label: 'Analíticas',  icon: BarChart3,    allowedRoles: ['admin', 'owner'] },
 ]
 
 export function Sidebar() {
