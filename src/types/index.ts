@@ -94,6 +94,7 @@ export interface Cliente {
   email: string | null
   identificacion_fiscal: string | null
   notas: string | null
+  moroso: boolean
   created_at: string
   updated_at: string
 }
@@ -138,6 +139,7 @@ export interface Venta {
   descuento: number
   total: number
   notas: string | null
+  archivado: boolean
   pagos?: PagoVenta[]
   items?: DetalleVenta[]
   created_at: string

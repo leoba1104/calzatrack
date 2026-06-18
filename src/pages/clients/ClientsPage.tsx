@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Users, Pencil, Trash } from 'lucide-react'
+import { Plus, Search, Users, Pencil, Trash, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { formatDate } from '@/lib/utils'
@@ -92,7 +92,17 @@ export function ClientsPage() {
               ) : (
                 clientes?.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900">{c.nombre} {c.apellido ?? ''}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{c.nombre} {c.apellido ?? ''}</span>
+                        {c.moroso && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-600 shrink-0">
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            Moroso
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{c.telefono ?? '—'}</td>
                     <td className="px-4 py-3 text-gray-600">{c.email ?? '—'}</td>
                     <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{c.notas ?? '—'}</td>

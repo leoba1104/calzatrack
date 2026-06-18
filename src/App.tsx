@@ -12,6 +12,7 @@ import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage'
 import { EmployeesPage } from '@/pages/employees/EmployeesPage'
 import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
 import { ApartadosPage } from '@/pages/apartados/ApartadosPage'
+import { CreditosPage } from '@/pages/creditos/CreditosPage'
 import { PurchasesPage } from '@/pages/purchases/PurchasesPage'
 
 const queryClient = new QueryClient({
@@ -77,6 +78,7 @@ export default function App() {
             <Route path="inventario" element={<InventoryPage />} />
             <Route path="ventas" element={<VentasPage />} />
             <Route path="apartados" element={<ApartadosPage />} />
+            <Route path="creditos"  element={<CreditosPage />} />
             <Route path="clientes" element={<ClientsPage />} />
             <Route path="empleados" element={<EmployeesPage />} />
             <Route path="proveedores" element={<SuppliersPage />} />

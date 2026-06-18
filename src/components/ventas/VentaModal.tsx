@@ -203,6 +203,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
     mutationFn: async (data: HeaderData) => {
       if (items.length === 0) throw new Error('NO_ITEMS')
       if (estadoActual === 'pagada' && !data.metodo_pago) throw new Error('NO_PAGO')
+      if (estadoActual === 'credito' && !data.cliente_id) throw new Error('NO_CLIENTE_CREDITO')
       const abonoInicial = data.abono_inicial ?? 0
       if ((estadoActual === 'apartado' || estadoActual === 'credito') && abonoInicial > 0 && !data.metodo_pago) throw new Error('NO_PAGO')
 
@@ -278,6 +279,9 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ventas'] })
+      qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
+      qc.invalidateQueries({ queryKey: ['apartados'] })
+      qc.invalidateQueries({ queryKey: ['creditos'] })
       qc.invalidateQueries({ queryKey: ['inventario'] })
       qc.invalidateQueries({ queryKey: ['inventario-disponible'] })
       qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
@@ -287,6 +291,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
     onError: (e: Error) => {
       if (e.message === 'NO_ITEMS') toast.error('Agregue al menos un producto')
       else if (e.message === 'NO_PAGO') toast.error('Seleccione el método de pago')
+      else if (e.message === 'NO_CLIENTE_CREDITO') toast.error('El crédito debe asignarse a un cliente registrado')
       else toast.error('Error al registrar la venta')
     },
   })

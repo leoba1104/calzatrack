@@ -14,6 +14,7 @@ import {
   Building2,
   ShoppingCart,
   Tag,
+  CreditCard,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -35,6 +36,7 @@ const navItems: NavItem[] = [
   { to: '/inventario', label: 'Inventario', icon: Package },
   { to: '/ventas',     label: 'Ventas',     icon: FileText },
   { to: '/apartados',  label: 'Apartados',  icon: Tag },
+  { to: '/creditos',   label: 'Créditos',   icon: CreditCard },
   { to: '/clientes',   label: 'Clientes',   icon: Users },
   { to: '/empleados',   label: 'Empleados',   icon: UserCog,      allowedRoles: ['admin', 'owner'] },
   { to: '/proveedores', label: 'Proveedores', icon: Building2,    allowedRoles: ['admin', 'owner'] },

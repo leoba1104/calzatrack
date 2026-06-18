@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, CheckCircle2, Loader2, Ban } from 'lucide-react'
-import { addDays, differenceInDays, format } from 'date-fns'
+import { Plus, CheckCircle2, Loader2, Archive, AlertTriangle } from 'lucide-react'
+import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
@@ -14,12 +14,7 @@ type RichPago = PagoVenta & { empleado?: { nombre: string; apellido: string | nu
 type RichItem = DetalleVenta & {
   variante?: { sku: string; talla: string | null; color: string | null; producto: { nombre: string } } | null
 }
-
-function diasInfo(createdAt: string) {
-  const limite = addDays(new Date(createdAt), 60)
-  const dias   = differenceInDays(limite, new Date())
-  return { limite, dias, vencido: dias < 0 }
-}
+type RichCliente = { id: string; nombre: string; apellido: string | null; moroso: boolean }
 
 const metodoPagoLabel: Record<MetodoPago, string> = {
   efectivo:      'Efectivo',
@@ -29,35 +24,38 @@ const metodoPagoLabel: Record<MetodoPago, string> = {
   otro:          'Otro',
 }
 
-interface ApartadoDetailModalProps {
+interface CreditoDetailModalProps {
   venta: Venta | null
   isOpen: boolean
   onClose: () => void
   onCompleted?: () => void
 }
 
-export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: ApartadoDetailModalProps) {
+export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: CreditoDetailModalProps) {
   const qc = useQueryClient()
 
-  const [showAbono, setShowAbono]     = useState(false)
-  const [monto, setMonto]             = useState('')
-  const [tipoPago, setTipoPago]       = useState<MetodoPago>('efectivo')
-  const [fechaAbono, setFechaAbono]   = useState(new Date().toISOString().slice(0, 10))
-  const [notasAbono, setNotasAbono]   = useState('')
+  const [showAbono, setShowAbono]   = useState(false)
+  const [monto, setMonto]           = useState('')
+  const [tipoPago, setTipoPago]     = useState<MetodoPago>('efectivo')
+  const [fechaAbono, setFechaAbono] = useState(new Date().toISOString().slice(0, 10))
+  const [notasAbono, setNotasAbono] = useState('')
 
-  // Derived values — safe to compute even when venta is null (guarded below)
   const pagos        = (venta?.pagos  ?? []) as unknown as RichPago[]
   const items        = (venta?.items  ?? []) as unknown as RichItem[]
-  const cliente      = (venta?.cliente ?? null) as { nombre: string; apellido: string | null } | null
+  const cliente      = (venta?.cliente ?? null) as RichCliente | null
   const totalAbonado = pagos.reduce((s, p) => s + p.monto, 0)
   const saldo        = (venta?.total ?? 0) - totalAbonado
   const porcentaje   = venta ? Math.min(100, Math.round((totalAbonado / venta.total) * 100)) : 0
-  const { limite, dias, vencido } = venta
-    ? diasInfo(venta.created_at)
-    : { limite: new Date(), dias: 60, vencido: false }
-  const pagado = saldo <= 0
+  const pagado       = saldo <= 0
 
-  // Hooks must all be called unconditionally before any early return
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['creditos'] })
+    qc.invalidateQueries({ queryKey: ['ventas'] })
+    qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
+    qc.invalidateQueries({ queryKey: ['clientes'] })
+  }
+
+  // All hooks before early return
   const abonoMutation = useMutation({
     mutationFn: async () => {
       const montoNum = parseFloat(monto)
@@ -73,9 +71,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
       if (error) throw error
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['apartados'] })
-      qc.invalidateQueries({ queryKey: ['ventas'] })
-      qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
+      invalidate()
       toast.success('Abono registrado')
       setMonto('')
       setNotasAbono('')
@@ -91,59 +87,81 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
       if (error) throw error
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['apartados'] })
-      qc.invalidateQueries({ queryKey: ['ventas'] })
-      qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
-      toast.success('¡Apartado completado! — marcado como pagado')
+      invalidate()
+      toast.success('¡Crédito completado! — marcado como pagado')
       onCompleted?.()
       onClose()
     },
-    onError: () => toast.error('Error al completar el apartado'),
+    onError: () => toast.error('Error al completar el crédito'),
   })
 
-  const cancelarDeudaMutation = useMutation({
+  const archivarMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from('ventas').update({ estado: 'pagada' }).eq('id', venta!.id)
+      const { error } = await supabase.from('ventas').update({ archivado: true }).eq('id', venta!.id)
       if (error) throw error
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['apartados'] })
-      qc.invalidateQueries({ queryKey: ['ventas'] })
-      qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
-      toast.success('Deuda cancelada — apartado cerrado')
+      invalidate()
+      toast.success('Crédito archivado')
       onCompleted?.()
       onClose()
     },
-    onError: () => toast.error('Error al cancelar la deuda'),
+    onError: () => toast.error('Error al archivar el crédito'),
   })
 
-  // Early return AFTER all hooks
+  const toggleMorosoMutation = useMutation({
+    mutationFn: async (moroso: boolean) => {
+      const { error } = await supabase.from('clientes').update({ moroso }).eq('id', cliente!.id)
+      if (error) throw error
+    },
+    onSuccess: (_, moroso) => {
+      invalidate()
+      toast.success(moroso ? 'Cliente marcado como moroso' : 'Morosidad removida')
+    },
+    onError: () => toast.error('Error al actualizar el cliente'),
+  })
+
   if (!venta) return null
 
-  const diasBadgeClass = vencido
-    ? 'bg-red-100 text-red-700'
-    : dias <= 7
-    ? 'bg-amber-100 text-amber-700'
-    : 'bg-green-100 text-green-700'
-
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Apartado ${venta.numero_venta}`} size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={`Crédito ${venta.numero_venta}`} size="xl">
       {/* Header */}
       <div className="px-6 pt-5 pb-4 border-b border-gray-100 grid grid-cols-2 gap-x-8 gap-y-3">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wider">Cliente</p>
-          <p className="text-sm font-semibold text-gray-900 mt-0.5">
-            {cliente ? `${cliente.nombre} ${cliente.apellido ?? ''}`.trim() : 'Cliente general'}
-          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-sm font-semibold text-gray-900">
+              {cliente ? `${cliente.nombre} ${cliente.apellido ?? ''}`.trim() : '—'}
+            </p>
+            {cliente?.moroso && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                <AlertTriangle className="w-3 h-3" />
+                Moroso
+              </span>
+            )}
+          </div>
+          {cliente && (
+            <button
+              onClick={() => toggleMorosoMutation.mutate(!cliente.moroso)}
+              disabled={toggleMorosoMutation.isPending}
+              className={cn(
+                'mt-1.5 text-xs underline transition-colors',
+                cliente.moroso ? 'text-gray-400 hover:text-gray-600' : 'text-red-500 hover:text-red-700'
+              )}
+            >
+              {toggleMorosoMutation.isPending
+                ? '...'
+                : cliente.moroso ? 'Quitar morosidad' : 'Marcar como moroso'
+              }
+            </button>
+          )}
         </div>
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-wider">Fecha límite</p>
-          <div className="flex items-center gap-2 mt-0.5">
-            <p className="text-sm text-gray-700">{format(limite, "d 'de' MMMM yyyy", { locale: es })}</p>
-            <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold', diasBadgeClass)}>
-              {vencido ? `Vencido hace ${Math.abs(dias)}d` : `${dias}d restantes`}
-            </span>
-          </div>
+          <p className="text-xs text-gray-400 uppercase tracking-wider">Fecha del crédito</p>
+          <p className="text-sm text-gray-700 mt-0.5">
+            {format(new Date(venta.created_at), "d 'de' MMMM yyyy", { locale: es })}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">Sin fecha límite de pago</p>
         </div>
 
         {/* Progress */}
@@ -157,7 +175,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
           </div>
           <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all duration-500', pagado ? 'bg-green-500' : 'bg-brand-500')}
+              className={cn('h-full rounded-full transition-all duration-500', pagado ? 'bg-green-500' : 'bg-orange-400')}
               style={{ width: `${porcentaje}%` }}
             />
           </div>
@@ -167,7 +185,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
 
       {/* Products */}
       <div className="px-6 py-4 border-b border-gray-100">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Productos reservados</p>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Productos</p>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-gray-400 border-b border-gray-100">
@@ -201,9 +219,9 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
 
       {/* Payment history + abono form */}
       <div className="px-6 py-4">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Historial de abonos</p>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Historial de pagos</p>
         {pagos.length === 0 ? (
-          <p className="text-sm text-gray-400 italic">Sin abonos registrados aún</p>
+          <p className="text-sm text-gray-400 italic">Sin pagos registrados aún</p>
         ) : (
           <div className="space-y-2">
             {pagos.map((p, i) => (
@@ -215,15 +233,14 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
                     {p.notas && ` · ${p.notas}`}
                   </p>
                 </div>
-                <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-orange-500" />
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Add abono */}
         {!pagado && (
           <div className="mt-4">
             {!showAbono ? (
@@ -233,24 +250,24 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
                   className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
-                  Registrar abono
+                  Registrar pago
                 </button>
                 <button
-                  onClick={() => cancelarDeudaMutation.mutate()}
-                  disabled={cancelarDeudaMutation.isPending}
-                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-60"
-                  title="Condonar el saldo restante y cerrar el apartado"
+                  onClick={() => archivarMutation.mutate()}
+                  disabled={archivarMutation.isPending}
+                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-60"
+                  title="Archivar crédito — oculta de la lista activa sin restaurar stock"
                 >
-                  {cancelarDeudaMutation.isPending
+                  {archivarMutation.isPending
                     ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <Ban className="w-4 h-4" />
+                    : <Archive className="w-4 h-4" />
                   }
-                  Cancelar deuda
+                  Archivar crédito
                 </button>
               </div>
             ) : (
-              <div className="mt-2 p-4 border border-brand-100 rounded-xl bg-brand-50/40 space-y-3">
-                <p className="text-sm font-semibold text-gray-700">Nuevo abono — saldo: {formatCRC(saldo)}</p>
+              <div className="mt-2 p-4 border border-orange-100 rounded-xl bg-orange-50/40 space-y-3">
+                <p className="text-sm font-semibold text-gray-700">Nuevo pago — saldo: {formatCRC(saldo)}</p>
                 <div className="grid grid-cols-2 gap-3">
                   <FormField label="Monto" required>
                     <input
@@ -280,16 +297,16 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
                   </FormField>
                 </div>
                 <div className="flex gap-2 justify-end">
-                  <button onClick={() => setShowAbono(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  <button onClick={() => setShowAbono(false)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                     Cancelar
                   </button>
                   <button
                     onClick={() => abonoMutation.mutate()}
                     disabled={abonoMutation.isPending || !monto}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-60 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-60"
                   >
                     {abonoMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    Guardar abono
+                    Guardar pago
                   </button>
                 </div>
               </div>
@@ -297,25 +314,23 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
           </div>
         )}
 
-        {/* Complete button */}
         {pagado && (
           <div className="mt-4 p-4 bg-green-50 border border-green-100 rounded-xl flex items-center justify-between">
-            <p className="text-sm text-green-700 font-medium">¡Saldo completado! Puedes marcar el apartado como pagado.</p>
+            <p className="text-sm text-green-700 font-medium">¡Saldo completado! Puedes marcar el crédito como pagado.</p>
             <button
               onClick={() => completarMutation.mutate()}
               disabled={completarMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60 transition-colors shrink-0 ml-4"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60 shrink-0 ml-4"
             >
               {completarMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              {completarMutation.isPending ? 'Completando...' : 'Completar apartado'}
+              {completarMutation.isPending ? 'Completando...' : 'Marcar como pagado'}
             </button>
           </div>
         )}
       </div>
 
-      {/* Footer */}
       <div className="px-6 py-4 border-t border-gray-100 flex justify-end bg-gray-50/50">
-        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
           Cerrar
         </button>
       </div>
