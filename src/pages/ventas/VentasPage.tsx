@@ -10,6 +10,7 @@ import { VentaModal } from '@/components/ventas/VentaModal'
 import type { Venta, VentaEstado } from '@/types'
 
 type Preset = 'hoy' | 'semana' | 'mes' | 'año' | 'custom'
+type PagoRow = { monto: number; tipo_pago: string }
 
 function isoDate(d: Date) { return format(d, 'yyyy-MM-dd') }
 
@@ -30,6 +31,8 @@ const estadoConfig: Record<VentaEstado, { label: string; className: string }> = 
   anulada:   { label: 'Anulada',   className: 'bg-red-100 text-red-600' },
 }
 
+interface EmpleadoOption { id: string; nombre: string; apellido: string | null }
+
 export function VentasPage() {
   const { activeTienda, canManage, isAdmin } = useAuth()
   const qc = useQueryClient()
@@ -40,29 +43,45 @@ export function VentasPage() {
   const [preset, setPreset]         = useState<Preset>('mes')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo]     = useState('')
+  const [empleadoId, setEmpleadoId] = useState('')
 
   const dateRange = preset === 'custom'
     ? (customFrom || customTo ? { from: customFrom, to: customTo } : null)
     : presetRange(preset)
 
-  // Reset search on filter change so user doesn't get confused
   useEffect(() => { setSearch('') }, [preset, customFrom, customTo])
 
+  const { data: empleados } = useQuery({
+    queryKey: ['empleados-list', activeTienda?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('empleados')
+        .select('id, nombre, apellido')
+        .eq('tienda_id', activeTienda!.id)
+        .eq('activo', true)
+        .order('nombre')
+      return (data ?? []) as EmpleadoOption[]
+    },
+    enabled: !!activeTienda,
+  })
+
   const { data: ventas, isLoading } = useQuery({
-    queryKey: ['ventas', activeTienda?.id, search, dateRange],
+    queryKey: ['ventas', activeTienda?.id, search, dateRange, empleadoId],
     queryFn: async () => {
       let query = supabase
         .from('ventas')
         .select(`
           id, numero_venta, fecha, estado, subtotal, impuesto, descuento, total, notas, created_at, updated_at,
           cliente:clientes(nombre, apellido),
-          empleado:empleados(nombre, apellido)
+          empleado:empleados(nombre, apellido),
+          pagos:pagos_venta(monto, tipo_pago)
         `)
         .order('fecha', { ascending: false })
         .limit(1000)
 
       query = query.eq('tienda_id', activeTienda!.id)
-      if (search)          query = query.ilike('numero_venta', `%${search}%`)
+      if (search)      query = query.ilike('numero_venta', `%${search}%`)
+      if (empleadoId)  query = query.eq('empleado_id', empleadoId)
       if (dateRange?.from) query = query.gte('fecha', dateRange.from)
       if (dateRange?.to)   query = query.lte('fecha', dateRange.to + 'T23:59:59')
 
@@ -87,13 +106,18 @@ export function VentasPage() {
     onError: () => toast.error('Error al anular la venta'),
   })
 
+  // Summary calculations — based on non-anulada ventas
   const all    = ventas ?? []
   const active = all.filter(v => v.estado !== 'anulada')
   const total  = active.reduce((sum, v) => sum + v.total, 0)
+
+  const allPagos = active.flatMap(v => ((v as unknown as { pagos: PagoRow[] }).pagos ?? []))
+  const enCaja   = allPagos.filter(p => p.tipo_pago === 'efectivo').reduce((s, p) => s + p.monto, 0)
+  const enCuenta = allPagos.filter(p => p.tipo_pago !== 'efectivo').reduce((s, p) => s + p.monto, 0)
+
   const colSpan = canManage ? 7 : 6
 
   return (
-    // h-full fills the <main> area; the card then fills that space
     <div className="flex flex-col h-full pt-6">
 
       {/* Page header */}
@@ -116,7 +140,8 @@ export function VentasPage() {
 
         {/* Filter bar */}
         <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 shrink-0">
-          <div className="relative w-52 shrink-0">
+          {/* Search */}
+          <div className="relative w-44 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               value={search}
@@ -126,6 +151,21 @@ export function VentasPage() {
             />
           </div>
 
+          {/* Employee filter */}
+          <select
+            value={empleadoId}
+            onChange={(e) => setEmpleadoId(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-gray-600 shrink-0"
+          >
+            <option value="">Todos los empleados</option>
+            {empleados?.map(e => (
+              <option key={e.id} value={e.id}>
+                {e.nombre} {e.apellido ?? ''}
+              </option>
+            ))}
+          </select>
+
+          {/* Date presets */}
           <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden text-sm shrink-0">
             {(['hoy', 'semana', 'mes', 'año'] as Preset[]).map((p) => (
               <button
@@ -170,7 +210,7 @@ export function VentasPage() {
           )}
         </div>
 
-        {/* Scrollable table body — flex-1 grows to fill remaining card height */}
+        {/* Scrollable table */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50">
@@ -196,8 +236,8 @@ export function VentasPage() {
                 </tr>
               ) : (
                 all.map((v) => {
-                  const estado  = v.estado as VentaEstado
-                  const config  = estadoConfig[estado]
+                  const estado   = v.estado as VentaEstado
+                  const config   = estadoConfig[estado]
                   const cliente  = v.cliente  as { nombre: string; apellido: string | null } | null
                   const empleado = v.empleado as { nombre: string; apellido: string | null } | null
                   return (
@@ -237,15 +277,32 @@ export function VentasPage() {
           </table>
         </div>
 
-        {/* Total footer — always visible at the bottom of the card */}
-        <div className="shrink-0 px-5 py-3 border-t border-gray-100 bg-brand-50 flex items-center justify-between">
-          <span className="text-xs text-gray-400">
+        {/* Footer — always visible */}
+        <div className="shrink-0 px-5 py-3 border-t border-gray-100 bg-brand-50 flex items-center justify-between gap-6">
+          <span className="text-xs text-gray-400 shrink-0">
             {all.length} venta{all.length !== 1 ? 's' : ''}
             {all.length !== active.length && ` · ${all.length - active.length} anulada${all.length - active.length !== 1 ? 's' : ''}`}
           </span>
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Total</span>
-            <span className="text-lg font-bold text-brand-700">{formatCRC(total)}</span>
+
+          <div className="flex items-center gap-5 text-sm">
+            {/* Cash breakdown */}
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+              <span className="text-gray-500 text-xs">Caja (efectivo)</span>
+              <span className="font-semibold text-gray-800">{formatCRC(enCaja)}</span>
+            </div>
+            <div className="h-4 w-px bg-gray-200" />
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+              <span className="text-gray-500 text-xs">Cuenta (tarjeta/SINPE/transf.)</span>
+              <span className="font-semibold text-gray-800">{formatCRC(enCuenta)}</span>
+            </div>
+            <div className="h-4 w-px bg-gray-300" />
+            {/* Grand total */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Total</span>
+              <span className="text-lg font-bold text-brand-700">{formatCRC(total)}</span>
+            </div>
           </div>
         </div>
       </div>
