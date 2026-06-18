@@ -13,13 +13,14 @@ import { FormField, inputClass } from '@/components/ui/FormField'
 import type { Cliente, Empleado, VentaEstado, MetodoPago } from '@/types'
 
 const headerSchema = z.object({
-  cliente_id:  z.string().optional(),
-  empleado_id: z.string().optional(),
-  estado:      z.enum(['borrador', 'apartado', 'credito', 'pagada', 'anulada']).default('pagada'),
+  cliente_id:    z.string().optional(),
+  empleado_id:   z.string().optional(),
+  estado:        z.enum(['borrador', 'apartado', 'credito', 'pagada', 'anulada']).default('pagada'),
   // z.enum rechaza "" (cadena vacía del <select>); validamos el valor real en la mutación
-  metodo_pago: z.string().optional(),
-  descuento:   z.number().min(0).default(0),
-  notas:       z.string().optional(),
+  metodo_pago:   z.string().optional(),
+  descuento:     z.number().min(0).default(0),
+  abono_inicial: z.number().min(0).default(0),
+  notas:         z.string().optional(),
 })
 
 type HeaderData = z.infer<typeof headerSchema>
@@ -75,7 +76,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
 
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<HeaderData>({
     resolver: zodResolver(headerSchema) as never,
-    defaultValues: { descuento: 0, estado: initialEstado },
+    defaultValues: { descuento: 0, estado: initialEstado, abono_inicial: 0 },
   })
 
   const estadoActual = watch('estado') as VentaEstado
@@ -192,7 +193,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
   }
 
   function handleClose() {
-    reset({ descuento: 0, estado: initialEstado })
+    reset({ descuento: 0, estado: initialEstado, abono_inicial: 0 })
     setItems([])
     setProductSearch('')
     onClose()
@@ -202,6 +203,8 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
     mutationFn: async (data: HeaderData) => {
       if (items.length === 0) throw new Error('NO_ITEMS')
       if (estadoActual === 'pagada' && !data.metodo_pago) throw new Error('NO_PAGO')
+      const abonoInicial = data.abono_inicial ?? 0
+      if ((estadoActual === 'apartado' || estadoActual === 'credito') && abonoInicial > 0 && !data.metodo_pago) throw new Error('NO_PAGO')
 
       const descuento = data.descuento ?? 0
       const { subtotal } = totals
@@ -252,12 +255,22 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
         .eq('id', venta.id)
       if (updateErr) throw updateErr
 
-      // 5. Register payment if pagada
+      // 5. Register payment
       if (data.estado === 'pagada' && data.metodo_pago) {
+        // Full payment — registers the complete total
         const { error: pagoErr } = await supabase.from('pagos_venta').insert({
           venta_id: venta.id,
           empleado_id: data.empleado_id || null,
           monto: total,
+          tipo_pago: data.metodo_pago as MetodoPago,
+        })
+        if (pagoErr) throw pagoErr
+      } else if ((data.estado === 'apartado' || data.estado === 'credito') && abonoInicial > 0 && data.metodo_pago) {
+        // Initial deposit — registers only what the customer paid now
+        const { error: pagoErr } = await supabase.from('pagos_venta').insert({
+          venta_id: venta.id,
+          empleado_id: data.empleado_id || null,
+          monto: abonoInicial,
           tipo_pago: data.metodo_pago as MetodoPago,
         })
         if (pagoErr) throw pagoErr
@@ -329,6 +342,37 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
                   <option value="otro">Otro</option>
                 </select>
               </FormField>
+            )}
+
+            {(estadoActual === 'apartado' || estadoActual === 'credito') && (
+              <div className="space-y-3 p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                  {estadoActual === 'apartado' ? 'Enganche inicial (opcional)' : 'Pago inicial (opcional)'}
+                </p>
+                <FormField label="Monto abonado ahora (₡)">
+                  <input
+                    {...register('abono_inicial', { valueAsNumber: true })}
+                    type="number"
+                    min="0"
+                    step="1"
+                    className={inputClass()}
+                    placeholder="0 — sin abono inicial"
+                  />
+                </FormField>
+                <FormField
+                  label="Método de pago"
+                  error={errors.metodo_pago?.message}
+                >
+                  <select {...register('metodo_pago')} className={inputClass(!!errors.metodo_pago)}>
+                    <option value="">Seleccionar...</option>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="tarjeta">Tarjeta</option>
+                    <option value="sinpe">SINPE Móvil</option>
+                    <option value="transferencia">Transferencia</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </FormField>
+              </div>
             )}
 
             <FormField label="Descuento (₡)">
