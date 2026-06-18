@@ -103,6 +103,17 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
 
   const cancelarDeudaMutation = useMutation({
     mutationFn: async () => {
+      // Register the outstanding balance as a payment so it appears in Ventas
+      if (saldo > 0) {
+        const { error: pagoError } = await supabase.from('pagos_venta').insert({
+          venta_id:  venta!.id,
+          monto:     saldo,
+          tipo_pago: 'otro',
+          fecha:     new Date().toISOString().slice(0, 10),
+          notas:     'Cancelación de deuda',
+        })
+        if (pagoError) throw pagoError
+      }
       const { error } = await supabase.from('ventas').update({ estado: 'pagada' }).eq('id', venta!.id)
       if (error) throw error
     },
