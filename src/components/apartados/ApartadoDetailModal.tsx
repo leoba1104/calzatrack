@@ -39,11 +39,13 @@ interface ApartadoDetailModalProps {
 export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: ApartadoDetailModalProps) {
   const qc = useQueryClient()
 
-  const [showAbono, setShowAbono]     = useState(false)
-  const [monto, setMonto]             = useState('')
-  const [tipoPago, setTipoPago]       = useState<MetodoPago>('efectivo')
-  const [fechaAbono, setFechaAbono]   = useState(new Date().toISOString().slice(0, 10))
-  const [notasAbono, setNotasAbono]   = useState('')
+  const [showAbono, setShowAbono]           = useState(false)
+  const [monto, setMonto]                   = useState('')
+  const [tipoPago, setTipoPago]             = useState<MetodoPago>('efectivo')
+  const [fechaAbono, setFechaAbono]         = useState(new Date().toISOString().slice(0, 10))
+  const [notasAbono, setNotasAbono]         = useState('')
+  const [showCancelar, setShowCancelar]     = useState(false)
+  const [metodoCancelacion, setMetodoCancelacion] = useState<MetodoPago>('efectivo')
 
   // Derived values — safe to compute even when venta is null (guarded below)
   const pagos        = (venta?.pagos  ?? []) as unknown as RichPago[]
@@ -102,15 +104,14 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
   })
 
   const cancelarDeudaMutation = useMutation({
-    mutationFn: async () => {
-      // Register the outstanding balance as a payment so it appears in Ventas
+    mutationFn: async (metodoPago: MetodoPago) => {
       if (saldo > 0) {
         const { error: pagoError } = await supabase.from('pagos_venta').insert({
           venta_id:  venta!.id,
           monto:     saldo,
-          tipo_pago: 'otro',
+          tipo_pago: metodoPago,
           fecha:     new Date().toISOString().slice(0, 10),
-          notas:     'Cancelación de apartado — deuda condonada',
+          notas:     'Cancelación de deuda',
         })
         if (pagoError) throw pagoError
       }
@@ -237,7 +238,42 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
         {/* Add abono */}
         {!pagado && (
           <div className="mt-4">
-            {!showAbono ? (
+            {showCancelar ? (
+              <div className="mt-2 p-4 border border-amber-100 rounded-xl bg-amber-50/40 space-y-3">
+                <p className="text-sm font-semibold text-gray-700">
+                  Cancelar deuda — saldo: <span className="text-amber-700">{formatCRC(saldo)}</span>
+                </p>
+                <FormField label="Método de pago recibido">
+                  <select
+                    value={metodoCancelacion}
+                    onChange={(e) => setMetodoCancelacion(e.target.value as MetodoPago)}
+                    className={inputClass()}
+                  >
+                    <option value="efectivo">Efectivo</option>
+                    <option value="tarjeta">Tarjeta</option>
+                    <option value="sinpe">SINPE Móvil</option>
+                    <option value="transferencia">Transferencia</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </FormField>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => setShowCancelar(false)}
+                    className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => cancelarDeudaMutation.mutate(metodoCancelacion)}
+                    disabled={cancelarDeudaMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-60"
+                  >
+                    {cancelarDeudaMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Confirmar y cerrar
+                  </button>
+                </div>
+              </div>
+            ) : !showAbono ? (
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => setShowAbono(true)}
@@ -247,15 +283,11 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
                   Registrar abono
                 </button>
                 <button
-                  onClick={() => cancelarDeudaMutation.mutate()}
-                  disabled={cancelarDeudaMutation.isPending}
-                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-60"
+                  onClick={() => setShowCancelar(true)}
+                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-amber-600 transition-colors"
                   title="Condonar el saldo restante y cerrar el apartado"
                 >
-                  {cancelarDeudaMutation.isPending
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <Ban className="w-4 h-4" />
-                  }
+                  <Ban className="w-4 h-4" />
                   Cancelar deuda
                 </button>
               </div>
