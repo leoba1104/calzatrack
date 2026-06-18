@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Eye, Tag, XCircle } from 'lucide-react'
+import { Eye, Tag, Trash2 } from 'lucide-react'
 import { addDays, differenceInDays } from 'date-fns'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
@@ -19,8 +19,9 @@ export function ApartadosPage() {
   const { activeTienda, canManage } = useAuth()
   const qc = useQueryClient()
 
-  const [detailVenta, setDetailVenta]   = useState<Venta | null>(null)
-  const [confirmCancelar, setConfirmCancelar] = useState<string | null>(null)
+  // Store only the ID so the modal always reflects the latest query data
+  const [detailVentaId, setDetailVentaId] = useState<string | null>(null)
+  const [confirmEliminar, setConfirmEliminar] = useState<string | null>(null)
 
   const { data: apartados, isLoading } = useQuery({
     queryKey: ['apartados', activeTienda?.id],
@@ -45,7 +46,7 @@ export function ApartadosPage() {
     enabled: !!activeTienda,
   })
 
-  const cancelarMutation = useMutation({
+  const eliminarMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('ventas').update({ estado: 'anulada' }).eq('id', id)
       if (error) throw error
@@ -54,10 +55,11 @@ export function ApartadosPage() {
       qc.invalidateQueries({ queryKey: ['apartados'] })
       qc.invalidateQueries({ queryKey: ['ventas'] })
       qc.invalidateQueries({ queryKey: ['inventario'] })
-      toast.success('Apartado cancelado — stock restaurado')
-      setConfirmCancelar(null)
+      toast.success('Apartado eliminado — stock restaurado')
+      setConfirmEliminar(null)
+      setDetailVentaId(null)
     },
-    onError: () => toast.error('Error al cancelar el apartado'),
+    onError: () => toast.error('Error al eliminar el apartado'),
   })
 
   return (
@@ -78,7 +80,7 @@ export function ApartadosPage() {
               <Tag className="w-5 h-5 text-brand-600" />
             </div>
             <p className="text-sm font-medium text-gray-700">No hay apartados activos</p>
-            {canManage && <p className="text-xs text-gray-400 mt-1">Crea el primero con el botón de arriba</p>}
+            <p className="text-xs text-gray-400 mt-1">Los apartados se crean desde la sección de Ventas</p>
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -102,7 +104,7 @@ export function ApartadosPage() {
                 const porcentaje  = Math.min(100, Math.round((totalAbonado / v.total) * 100))
                 const { dias, vencido } = diasInfo(v.created_at)
                 const pagado      = saldo <= 0
-                const confirming  = confirmCancelar === v.id
+                const confirming  = confirmEliminar === v.id
 
                 const diasClass = vencido
                   ? 'text-red-600 bg-red-50 border-red-100'
@@ -145,7 +147,7 @@ export function ApartadosPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end min-w-[120px]">
                         <button
-                          onClick={() => setDetailVenta(v)}
+                          onClick={() => setDetailVentaId(v.id)}
                           title="Ver detalle y abonar"
                           className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
                         >
@@ -155,16 +157,16 @@ export function ApartadosPage() {
                         {canManage && (
                           confirming ? (
                             <>
-                              <span className="text-xs text-gray-500 mx-1">¿Cancelar?</span>
+                              <span className="text-xs text-gray-500 mx-1">¿Eliminar?</span>
                               <button
-                                onClick={() => cancelarMutation.mutate(v.id)}
-                                disabled={cancelarMutation.isPending}
+                                onClick={() => eliminarMutation.mutate(v.id)}
+                                disabled={eliminarMutation.isPending}
                                 className="px-2 py-1 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-60 transition-colors"
                               >
                                 Sí
                               </button>
                               <button
-                                onClick={() => setConfirmCancelar(null)}
+                                onClick={() => setConfirmEliminar(null)}
                                 className="px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                               >
                                 No
@@ -172,11 +174,11 @@ export function ApartadosPage() {
                             </>
                           ) : (
                             <button
-                              onClick={() => setConfirmCancelar(v.id)}
-                              title="Cancelar apartado"
+                              onClick={() => setConfirmEliminar(v.id)}
+                              title="Eliminar apartado"
                               className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                             >
-                              <XCircle className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           )
                         )}
@@ -191,10 +193,10 @@ export function ApartadosPage() {
       </div>
 
       <ApartadoDetailModal
-        venta={detailVenta}
-        isOpen={!!detailVenta}
-        onClose={() => setDetailVenta(null)}
-        onCompleted={() => setDetailVenta(null)}
+        venta={apartados?.find(v => v.id === detailVentaId) ?? null}
+        isOpen={!!detailVentaId}
+        onClose={() => setDetailVentaId(null)}
+        onCompleted={() => setDetailVentaId(null)}
       />
     </div>
   )

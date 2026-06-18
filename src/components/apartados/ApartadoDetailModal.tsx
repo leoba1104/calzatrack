@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, CheckCircle2, Loader2 } from 'lucide-react'
+import { Plus, CheckCircle2, Loader2, Ban } from 'lucide-react'
 import { addDays, differenceInDays, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -96,6 +96,21 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
       onClose()
     },
     onError: () => toast.error('Error al completar el apartado'),
+  })
+
+  const cancelarDeudaMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('ventas').update({ estado: 'pagada' }).eq('id', venta!.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['apartados'] })
+      qc.invalidateQueries({ queryKey: ['ventas'] })
+      toast.success('Deuda cancelada — apartado cerrado')
+      onCompleted?.()
+      onClose()
+    },
+    onError: () => toast.error('Error al cancelar la deuda'),
   })
 
   // Early return AFTER all hooks
@@ -208,13 +223,27 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
         {!pagado && (
           <div className="mt-4">
             {!showAbono ? (
-              <button
-                onClick={() => setShowAbono(true)}
-                className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Registrar abono
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setShowAbono(true)}
+                  className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Registrar abono
+                </button>
+                <button
+                  onClick={() => cancelarDeudaMutation.mutate()}
+                  disabled={cancelarDeudaMutation.isPending}
+                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-60"
+                  title="Condonar el saldo restante y cerrar el apartado"
+                >
+                  {cancelarDeudaMutation.isPending
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Ban className="w-4 h-4" />
+                  }
+                  Cancelar deuda
+                </button>
+              </div>
             ) : (
               <div className="mt-2 p-4 border border-brand-100 rounded-xl bg-brand-50/40 space-y-3">
                 <p className="text-sm font-semibold text-gray-700">Nuevo abono — saldo: {formatCRC(saldo)}</p>
