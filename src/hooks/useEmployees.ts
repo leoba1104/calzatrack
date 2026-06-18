@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import type { Empleado } from '@/types'
 
 export function useEmployees() {
-  const { activeTienda, isAdmin } = useAuth()
+  const { activeTienda } = useAuth()
 
   return useQuery({
     queryKey: ['empleados', activeTienda?.id],
@@ -15,7 +15,7 @@ export function useEmployees() {
         .select('*, tienda:tiendas(id, nombre, prefijo)')
         .order('nombre')
 
-      if (!isAdmin && activeTienda) {
+      if (activeTienda) {
         query.eq('tienda_id', activeTienda.id)
       }
 
