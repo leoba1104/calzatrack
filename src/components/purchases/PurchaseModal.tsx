@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
-import { formatCRC, cn } from '@/lib/utils'
+import { formatCRC } from '@/lib/utils'
 import type { Proveedor } from '@/types'
 
 const headerSchema = z.object({
