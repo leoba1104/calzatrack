@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, UserCog, Pencil, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Plus, UserCog, Pencil, ToggleLeft, ToggleRight, Trash2, Phone, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useEmployees, useToggleEmpleadoActivo } from '@/hooks/useEmployees'
@@ -14,12 +14,16 @@ import { FormField, inputClass } from '@/components/ui/FormField'
 import type { Empleado } from '@/types'
 
 const schema = z.object({
-  nombre: z.string().min(1, 'Nombre requerido'),
-  apellido: z.string().optional(),
+  nombre:    z.string().min(1, 'Nombre requerido'),
+  apellido:  z.string().optional(),
+  telefono:  z.string().optional(),
+  email:     z.string().email('Email inválido').optional().or(z.literal('')),
   tienda_id: z.string().min(1, 'Tienda requerida'),
 })
 
 type FormData = z.infer<typeof schema>
+
+// ── Modal ────────────────────────────────────────────────────────────────────
 
 interface EmpleadoModalProps {
   isOpen: boolean
@@ -34,17 +38,26 @@ function EmpleadoModal({ isOpen, onClose, empleado }: EmpleadoModalProps) {
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      nombre: empleado?.nombre ?? '',
-      apellido: empleado?.apellido ?? '',
-      tienda_id: empleado?.tienda_id ?? activeTienda?.id ?? '',
-    },
+    defaultValues: { nombre: '', apellido: '', telefono: '', email: '', tienda_id: '' },
   })
 
+  // Reset form whenever the modal opens or the target employee changes
+  useEffect(() => {
+    if (isOpen) {
+      reset({
+        nombre:    empleado?.nombre    ?? '',
+        apellido:  empleado?.apellido  ?? '',
+        telefono:  empleado?.telefono  ?? '',
+        email:     empleado?.email     ?? '',
+        tienda_id: empleado?.tienda_id ?? activeTienda?.id ?? '',
+      })
+    }
+  }, [isOpen, empleado, activeTienda, reset])
+
   const { data: tiendas } = useQuery({
-    queryKey: ['tiendas-select'],
+    queryKey: ['tiendas'],
     queryFn: async () => {
-      const { data } = await supabase.from('tiendas').select('id, nombre').eq('activo', true).order('nombre')
+      const { data } = await supabase.from('tiendas').select('id, nombre').order('nombre')
       return data ?? []
     },
     enabled: isOpen && isAdmin,
@@ -53,8 +66,10 @@ function EmpleadoModal({ isOpen, onClose, empleado }: EmpleadoModalProps) {
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
       const payload = {
-        nombre: data.nombre,
-        apellido: data.apellido || null,
+        nombre:    data.nombre,
+        apellido:  data.apellido  || null,
+        telefono:  data.telefono  || null,
+        email:     data.email     || null,
         tienda_id: data.tienda_id,
       }
       if (isEditing) {
@@ -68,7 +83,6 @@ function EmpleadoModal({ isOpen, onClose, empleado }: EmpleadoModalProps) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['empleados'] })
       toast.success(isEditing ? 'Empleado actualizado' : 'Empleado creado')
-      reset()
       onClose()
     },
     onError: () => toast.error('Error al guardar el empleado'),
@@ -83,6 +97,15 @@ function EmpleadoModal({ isOpen, onClose, empleado }: EmpleadoModalProps) {
           </FormField>
           <FormField label="Apellido">
             <input {...register('apellido')} className={inputClass()} placeholder="González" />
+          </FormField>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormField label="Teléfono" error={errors.telefono?.message}>
+            <input {...register('telefono')} className={inputClass(!!errors.telefono)} placeholder="8888-0000" />
+          </FormField>
+          <FormField label="Correo electrónico" error={errors.email?.message}>
+            <input {...register('email')} type="email" className={inputClass(!!errors.email)} placeholder="mariana@ejemplo.com" />
           </FormField>
         </div>
 
@@ -116,12 +139,30 @@ function EmpleadoModal({ isOpen, onClose, empleado }: EmpleadoModalProps) {
   )
 }
 
+// ── Page ─────────────────────────────────────────────────────────────────────
+
 export function EmployeesPage() {
   const { data: empleados, isLoading } = useEmployees()
   const { canManage } = useAuth()
+  const qc = useQueryClient()
   const toggleActivo = useToggleEmpleadoActivo()
+
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Empleado | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  const deleteEmpleado = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('empleados').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['empleados'] })
+      toast.success('Empleado eliminado')
+      setConfirmDeleteId(null)
+    },
+    onError: () => toast.error('Error al eliminar el empleado'),
+  })
 
   function openCreate() { setEditing(null); setModalOpen(true) }
   function openEdit(e: Empleado) { setEditing(e); setModalOpen(true) }
@@ -165,6 +206,7 @@ export function EmployeesPage() {
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Nombre</th>
+                <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Contacto</th>
                 <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tienda</th>
                 <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado</th>
                 <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Desde</th>
@@ -175,6 +217,8 @@ export function EmployeesPage() {
               {empleados.map((emp) => {
                 const fullName = [emp.nombre, emp.apellido].filter(Boolean).join(' ')
                 const initial = fullName.charAt(0).toUpperCase()
+                const confirming = confirmDeleteId === emp.id
+
                 return (
                   <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-4">
@@ -185,15 +229,32 @@ export function EmployeesPage() {
                         <span className="text-sm font-medium text-gray-900">{fullName}</span>
                       </div>
                     </td>
+                    <td className="px-6 py-4">
+                      <div className="space-y-0.5">
+                        {emp.telefono && (
+                          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                            <Phone className="w-3 h-3 text-gray-400" />
+                            {emp.telefono}
+                          </div>
+                        )}
+                        {emp.email && (
+                          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                            <Mail className="w-3 h-3 text-gray-400" />
+                            {emp.email}
+                          </div>
+                        )}
+                        {!emp.telefono && !emp.email && (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {(emp.tienda as { nombre: string } | undefined)?.nombre ?? '—'}
                     </td>
                     <td className="px-6 py-4">
                       <span className={cn(
                         'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-                        emp.activo
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-500'
+                        emp.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                       )}>
                         {emp.activo ? 'Activo' : 'Inactivo'}
                       </span>
@@ -202,27 +263,53 @@ export function EmployeesPage() {
                       {new Date(emp.created_at).toLocaleDateString('es-CR', { year: 'numeric', month: 'short', day: 'numeric' })}
                     </td>
                     {canManage && (
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1 justify-end">
-                          <button
-                            onClick={() => openEdit(emp)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-                            title="Editar"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => toggleActivo.mutate({ id: emp.id, activo: !emp.activo })}
-                            disabled={toggleActivo.isPending}
-                            className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors disabled:opacity-50"
-                            title={emp.activo ? 'Desactivar' : 'Activar'}
-                          >
-                            {emp.activo
-                              ? <ToggleRight className="w-4 h-4 text-green-500" />
-                              : <ToggleLeft className="w-4 h-4" />
-                            }
-                          </button>
-                        </div>
+                      <td className="px-6 py-4 min-w-[160px]">
+                        {confirming ? (
+                          <div className="flex items-center gap-1 justify-end">
+                            <span className="text-xs text-gray-500 mr-1">¿Eliminar?</span>
+                            <button
+                              onClick={() => deleteEmpleado.mutate(emp.id)}
+                              disabled={deleteEmpleado.isPending}
+                              className="px-2 py-1 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-60 transition-colors"
+                            >
+                              Sí
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 justify-end">
+                            <button
+                              onClick={() => openEdit(emp)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                              title="Editar"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => toggleActivo.mutate({ id: emp.id, activo: !emp.activo })}
+                              disabled={toggleActivo.isPending}
+                              className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors disabled:opacity-50"
+                              title={emp.activo ? 'Desactivar' : 'Activar'}
+                            >
+                              {emp.activo
+                                ? <ToggleRight className="w-4 h-4 text-green-500" />
+                                : <ToggleLeft className="w-4 h-4" />
+                              }
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(emp.id)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     )}
                   </tr>

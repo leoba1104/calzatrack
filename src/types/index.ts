@@ -31,6 +31,8 @@ export interface Empleado {
   tienda?: Tienda
   nombre: string
   apellido: string | null
+  telefono: string | null
+  email: string | null
   activo: boolean
   created_at: string
   updated_at: string
