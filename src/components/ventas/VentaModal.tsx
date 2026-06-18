@@ -82,7 +82,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
   const estadoActual = watch('estado') as VentaEstado
 
   const { data: clientes } = useQuery({
-    queryKey: ['clientes-select'],
+    queryKey: ['clientes'],
     queryFn: async () => {
       const { data } = await supabase
         .from('clientes')
