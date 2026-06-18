@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, ShoppingCart, XCircle, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Search, ShoppingCart, XCircle, CalendarDays } from 'lucide-react'
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
@@ -15,10 +15,10 @@ function isoDate(d: Date) { return format(d, 'yyyy-MM-dd') }
 
 function presetRange(p: Preset): { from: string; to: string } | null {
   const now = new Date()
-  if (p === 'hoy')   return { from: isoDate(startOfDay(now)),   to: isoDate(endOfDay(now)) }
+  if (p === 'hoy')    return { from: isoDate(startOfDay(now)),  to: isoDate(endOfDay(now)) }
   if (p === 'semana') return { from: isoDate(startOfWeek(now, { weekStartsOn: 1 })), to: isoDate(endOfWeek(now, { weekStartsOn: 1 })) }
-  if (p === 'mes')   return { from: isoDate(startOfMonth(now)), to: isoDate(endOfMonth(now)) }
-  if (p === 'año')   return { from: isoDate(startOfYear(now)),  to: isoDate(endOfYear(now)) }
+  if (p === 'mes')    return { from: isoDate(startOfMonth(now)), to: isoDate(endOfMonth(now)) }
+  if (p === 'año')    return { from: isoDate(startOfYear(now)),  to: isoDate(endOfYear(now)) }
   return null
 }
 
@@ -30,25 +30,23 @@ const estadoConfig: Record<VentaEstado, { label: string; className: string }> = 
   anulada:   { label: 'Anulada',   className: 'bg-red-100 text-red-600' },
 }
 
-const PAGE_SIZE = 20
-
 export function VentasPage() {
   const { activeTienda, canManage, isAdmin } = useAuth()
   const qc = useQueryClient()
+
   const [search, setSearch]         = useState('')
   const [modalOpen, setModalOpen]   = useState(false)
   const [anulando, setAnulando]     = useState<Venta | null>(null)
   const [preset, setPreset]         = useState<Preset>('mes')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo]     = useState('')
-  const [page, setPage]             = useState(0)
 
   const dateRange = preset === 'custom'
     ? (customFrom || customTo ? { from: customFrom, to: customTo } : null)
     : presetRange(preset)
 
-  // Reset to page 0 whenever filters change
-  useEffect(() => { setPage(0) }, [search, dateRange])
+  // Reset search on filter change so user doesn't get confused
+  useEffect(() => { setSearch('') }, [preset, customFrom, customTo])
 
   const { data: ventas, isLoading } = useQuery({
     queryKey: ['ventas', activeTienda?.id, search, dateRange],
@@ -61,11 +59,10 @@ export function VentasPage() {
           empleado:empleados(nombre, apellido)
         `)
         .order('fecha', { ascending: false })
-        .limit(500)
+        .limit(1000)
 
       query = query.eq('tienda_id', activeTienda!.id)
-
-      if (search) query = query.ilike('numero_venta', `%${search}%`)
+      if (search)          query = query.ilike('numero_venta', `%${search}%`)
       if (dateRange?.from) query = query.gte('fecha', dateRange.from)
       if (dateRange?.to)   query = query.lte('fecha', dateRange.to + 'T23:59:59')
 
@@ -77,10 +74,7 @@ export function VentasPage() {
 
   const anularMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('ventas')
-        .update({ estado: 'anulada' })
-        .eq('id', id)
+      const { error } = await supabase.from('ventas').update({ estado: 'anulada' }).eq('id', id)
       if (error) throw error
     },
     onSuccess: () => {
@@ -93,9 +87,17 @@ export function VentasPage() {
     onError: () => toast.error('Error al anular la venta'),
   })
 
+  const all    = ventas ?? []
+  const active = all.filter(v => v.estado !== 'anulada')
+  const total  = active.reduce((sum, v) => sum + v.total, 0)
+  const colSpan = canManage ? 7 : 6
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    // h-full fills the <main> area; the card then fills that space
+    <div className="flex flex-col h-full pt-6">
+
+      {/* Page header */}
+      <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Ventas</h1>
           <p className="text-sm text-gray-500 mt-1">{activeTienda?.nombre}</p>
@@ -109,9 +111,11 @@ export function VentasPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
-          {/* Search */}
+      {/* Card fills remaining height */}
+      <div className="flex flex-col flex-1 min-h-0 bg-white rounded-xl border border-gray-200">
+
+        {/* Filter bar */}
+        <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 shrink-0">
           <div className="relative w-52 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -122,8 +126,7 @@ export function VentasPage() {
             />
           </div>
 
-          {/* Preset buttons */}
-          <div className="flex items-center gap-1 rounded-lg border border-gray-200 overflow-hidden text-sm shrink-0">
+          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden text-sm shrink-0">
             {(['hoy', 'semana', 'mes', 'año'] as Preset[]).map((p) => (
               <button
                 key={p}
@@ -148,144 +151,107 @@ export function VentasPage() {
             </button>
           </div>
 
-          {/* Custom date inputs */}
           {preset === 'custom' && (
             <div className="flex items-center gap-2 shrink-0">
               <input
                 type="date"
                 value={customFrom}
                 onChange={(e) => setCustomFrom(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
               />
               <span className="text-gray-400 text-xs">—</span>
               <input
                 type="date"
                 value={customTo}
                 onChange={(e) => setCustomTo(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
           )}
         </div>
 
-        {(() => {
-          const all = ventas ?? []
-          const active = all.filter(v => v.estado !== 'anulada')
-          const totalGeneral = active.reduce((sum, v) => sum + v.total, 0)
-          const totalPages = Math.max(1, Math.ceil(all.length / PAGE_SIZE))
-          const paged = all.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-          const colSpan = canManage ? 7 : 6
-
-          return (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="text-left px-4 py-3 font-medium text-gray-600"># Venta</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-600">Cliente</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-600">Empleado</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha</th>
-                      <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
-                      <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
-                      {canManage && <th className="px-4 py-3" />}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {isLoading ? (
-                      <tr><td colSpan={colSpan} className="text-center py-10 text-gray-400">Cargando...</td></tr>
-                    ) : all.length === 0 ? (
-                      <tr>
-                        <td colSpan={colSpan} className="text-center py-12">
-                          <ShoppingCart className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                          <p className="text-gray-400">No se encontraron ventas</p>
+        {/* Scrollable table body — flex-1 grows to fill remaining card height */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-10 bg-gray-50">
+              <tr className="border-b border-gray-100">
+                <th className="text-left px-4 py-3 font-medium text-gray-600"># Venta</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Cliente</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Empleado</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
+                {canManage && <th className="px-4 py-3" />}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {isLoading ? (
+                <tr><td colSpan={colSpan} className="text-center py-10 text-gray-400">Cargando...</td></tr>
+              ) : all.length === 0 ? (
+                <tr>
+                  <td colSpan={colSpan} className="text-center py-16">
+                    <ShoppingCart className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                    <p className="text-gray-400">No se encontraron ventas</p>
+                  </td>
+                </tr>
+              ) : (
+                all.map((v) => {
+                  const estado  = v.estado as VentaEstado
+                  const config  = estadoConfig[estado]
+                  const cliente  = v.cliente  as { nombre: string; apellido: string | null } | null
+                  const empleado = v.empleado as { nombre: string; apellido: string | null } | null
+                  return (
+                    <tr key={v.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-brand-700">{v.numero_venta}</td>
+                      <td className="px-4 py-3 text-gray-700">
+                        {cliente ? `${cliente.nombre} ${cliente.apellido ?? ''}`.trim() : 'Cliente general'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {empleado ? `${empleado.nombre} ${empleado.apellido ?? ''}`.trim() : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">{formatDate(v.fecha)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCRC(v.total)}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', config.className)}>
+                          {config.label}
+                        </span>
+                      </td>
+                      {canManage && (
+                        <td className="px-4 py-3">
+                          {estado !== 'anulada' && isAdmin && (
+                            <button
+                              onClick={() => setAnulando(v)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                              title="Anular venta"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          )}
                         </td>
-                      </tr>
-                    ) : (
-                      paged.map((v) => {
-                        const estado = v.estado as VentaEstado
-                        const config = estadoConfig[estado]
-                        const cliente = v.cliente as { nombre: string; apellido: string | null } | null
-                        const empleado = v.empleado as { nombre: string; apellido: string | null } | null
-                        return (
-                          <tr key={v.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-4 py-3 font-mono text-xs font-semibold text-brand-700">{v.numero_venta}</td>
-                            <td className="px-4 py-3 text-gray-700">
-                              {cliente ? `${cliente.nombre} ${cliente.apellido ?? ''}`.trim() : 'Cliente general'}
-                            </td>
-                            <td className="px-4 py-3 text-gray-600">
-                              {empleado ? `${empleado.nombre} ${empleado.apellido ?? ''}`.trim() : '—'}
-                            </td>
-                            <td className="px-4 py-3 text-gray-500">{formatDate(v.fecha)}</td>
-                            <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCRC(v.total)}</td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', config.className)}>
-                                {config.label}
-                              </span>
-                            </td>
-                            {canManage && (
-                              <td className="px-4 py-3">
-                                {estado !== 'anulada' && isAdmin && (
-                                  <button
-                                    onClick={() => setAnulando(v)}
-                                    className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                                    title="Anular venta"
-                                  >
-                                    <XCircle className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </td>
-                            )}
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Footer: pagination + total */}
-              {!isLoading && all.length > 0 && (
-                <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/60 flex items-center justify-between gap-4">
-                  {/* Pagination */}
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <button
-                      onClick={() => setPage(p => Math.max(0, p - 1))}
-                      disabled={page === 0}
-                      className="p-1 rounded-lg hover:bg-gray-200 disabled:opacity-30 transition-colors"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <span className="px-1 text-sm text-gray-600">
-                      Pág. <strong>{page + 1}</strong> de <strong>{totalPages}</strong>
-                      <span className="text-gray-400 ml-2">({all.length} ventas)</span>
-                    </span>
-                    <button
-                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                      disabled={page >= totalPages - 1}
-                      className="p-1 rounded-lg hover:bg-gray-200 disabled:opacity-30 transition-colors"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Total */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">{active.length} venta{active.length !== 1 ? 's' : ''} (excl. anuladas)</span>
-                    <div className="h-4 w-px bg-gray-200" />
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</span>
-                    <span className="text-base font-bold text-brand-700">{formatCRC(totalGeneral)}</span>
-                  </div>
-                </div>
+                      )}
+                    </tr>
+                  )
+                })
               )}
-            </>
-          )
-        })()}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Total footer — always visible at the bottom of the card */}
+        <div className="shrink-0 px-5 py-3 border-t border-gray-100 bg-brand-50 flex items-center justify-between">
+          <span className="text-xs text-gray-400">
+            {all.length} venta{all.length !== 1 ? 's' : ''}
+            {all.length !== active.length && ` · ${all.length - active.length} anulada${all.length - active.length !== 1 ? 's' : ''}`}
+          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Total</span>
+            <span className="text-lg font-bold text-brand-700">{formatCRC(total)}</span>
+          </div>
+        </div>
       </div>
 
       <VentaModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
 
-      {/* Confirm anular dialog */}
       {anulando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
