@@ -51,9 +51,10 @@ interface DisponibleRow {
 interface VentaModalProps {
   isOpen: boolean
   onClose: () => void
+  initialEstado?: VentaEstado
 }
 
-export function VentaModal({ isOpen, onClose }: VentaModalProps) {
+export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaModalProps) {
   const { activeTienda } = useAuth()
   const qc = useQueryClient()
 
@@ -63,7 +64,7 @@ export function VentaModal({ isOpen, onClose }: VentaModalProps) {
 
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<HeaderData>({
     resolver: zodResolver(headerSchema) as never,
-    defaultValues: { descuento: 0, estado: 'pagada' },
+    defaultValues: { descuento: 0, estado: initialEstado },
   })
 
   const estadoActual = watch('estado') as VentaEstado
@@ -181,7 +182,7 @@ export function VentaModal({ isOpen, onClose }: VentaModalProps) {
   }
 
   function handleClose() {
-    reset()
+    reset({ descuento: 0, estado: initialEstado })
     setItems([])
     setProductSearch('')
     onClose()
