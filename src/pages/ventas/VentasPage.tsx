@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, ShoppingCart, XCircle, CalendarDays } from 'lucide-react'
+import { Plus, Search, ShoppingCart, XCircle, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
@@ -30,6 +30,8 @@ const estadoConfig: Record<VentaEstado, { label: string; className: string }> = 
   anulada:   { label: 'Anulada',   className: 'bg-red-100 text-red-600' },
 }
 
+const PAGE_SIZE = 20
+
 export function VentasPage() {
   const { activeTienda, canManage, isAdmin } = useAuth()
   const qc = useQueryClient()
@@ -39,10 +41,14 @@ export function VentasPage() {
   const [preset, setPreset]         = useState<Preset>('mes')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo]     = useState('')
+  const [page, setPage]             = useState(0)
 
   const dateRange = preset === 'custom'
     ? (customFrom || customTo ? { from: customFrom, to: customTo } : null)
     : presetRange(preset)
+
+  // Reset to page 0 whenever filters change
+  useEffect(() => { setPage(0) }, [search, dateRange])
 
   const { data: ventas, isLoading } = useQuery({
     queryKey: ['ventas', activeTienda?.id, search, dateRange],
@@ -162,92 +168,119 @@ export function VentasPage() {
           )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left px-4 py-3 font-medium text-gray-600"># Venta</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Cliente</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Empleado</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
-                {canManage && <th className="px-4 py-3" />}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {isLoading ? (
-                <tr><td colSpan={7} className="text-center py-10 text-gray-400">Cargando...</td></tr>
-              ) : ventas?.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-12">
-                    <ShoppingCart className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-400">No se encontraron ventas</p>
-                  </td>
-                </tr>
-              ) : (
-                ventas?.map((v) => {
-                  const estado = v.estado as VentaEstado
-                  const config = estadoConfig[estado]
-                  const cliente = v.cliente as { nombre: string; apellido: string | null } | null
-                  const empleado = v.empleado as { nombre: string; apellido: string | null } | null
+        {(() => {
+          const all = ventas ?? []
+          const active = all.filter(v => v.estado !== 'anulada')
+          const totalGeneral = active.reduce((sum, v) => sum + v.total, 0)
+          const totalPages = Math.max(1, Math.ceil(all.length / PAGE_SIZE))
+          const paged = all.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+          const colSpan = canManage ? 7 : 6
 
-                  return (
-                    <tr key={v.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs font-semibold text-brand-700">{v.numero_venta}</td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {cliente ? `${cliente.nombre} ${cliente.apellido ?? ''}`.trim() : 'Cliente general'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {empleado ? `${empleado.nombre} ${empleado.apellido ?? ''}`.trim() : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500">{formatDate(v.fecha)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCRC(v.total)}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', config.className)}>
-                          {config.label}
-                        </span>
-                      </td>
-                      {canManage && (
-                        <td className="px-4 py-3">
-                          {estado !== 'anulada' && isAdmin && (
-                            <button
-                              onClick={() => setAnulando(v)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                              title="Anular venta"
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </button>
-                          )}
-                        </td>
-                      )}
+          return (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="text-left px-4 py-3 font-medium text-gray-600"># Venta</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Cliente</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Empleado</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
+                      <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
+                      {canManage && <th className="px-4 py-3" />}
                     </tr>
-                  )
-                })
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {isLoading ? (
+                      <tr><td colSpan={colSpan} className="text-center py-10 text-gray-400">Cargando...</td></tr>
+                    ) : all.length === 0 ? (
+                      <tr>
+                        <td colSpan={colSpan} className="text-center py-12">
+                          <ShoppingCart className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                          <p className="text-gray-400">No se encontraron ventas</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      paged.map((v) => {
+                        const estado = v.estado as VentaEstado
+                        const config = estadoConfig[estado]
+                        const cliente = v.cliente as { nombre: string; apellido: string | null } | null
+                        const empleado = v.empleado as { nombre: string; apellido: string | null } | null
+                        return (
+                          <tr key={v.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3 font-mono text-xs font-semibold text-brand-700">{v.numero_venta}</td>
+                            <td className="px-4 py-3 text-gray-700">
+                              {cliente ? `${cliente.nombre} ${cliente.apellido ?? ''}`.trim() : 'Cliente general'}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {empleado ? `${empleado.nombre} ${empleado.apellido ?? ''}`.trim() : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-gray-500">{formatDate(v.fecha)}</td>
+                            <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCRC(v.total)}</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', config.className)}>
+                                {config.label}
+                              </span>
+                            </td>
+                            {canManage && (
+                              <td className="px-4 py-3">
+                                {estado !== 'anulada' && isAdmin && (
+                                  <button
+                                    onClick={() => setAnulando(v)}
+                                    className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                    title="Anular venta"
+                                  >
+                                    <XCircle className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Footer: pagination + total */}
+              {!isLoading && all.length > 0 && (
+                <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/60 flex items-center justify-between gap-4">
+                  {/* Pagination */}
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <button
+                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                      disabled={page === 0}
+                      className="p-1 rounded-lg hover:bg-gray-200 disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="px-1 text-sm text-gray-600">
+                      Pág. <strong>{page + 1}</strong> de <strong>{totalPages}</strong>
+                      <span className="text-gray-400 ml-2">({all.length} ventas)</span>
+                    </span>
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                      disabled={page >= totalPages - 1}
+                      className="p-1 rounded-lg hover:bg-gray-200 disabled:opacity-30 transition-colors"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Total */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">{active.length} venta{active.length !== 1 ? 's' : ''} (excl. anuladas)</span>
+                    <div className="h-4 w-px bg-gray-200" />
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</span>
+                    <span className="text-base font-bold text-brand-700">{formatCRC(totalGeneral)}</span>
+                  </div>
+                </div>
               )}
-            </tbody>
-            {ventas && ventas.length > 0 && (() => {
-              const totalGeneral = ventas
-                .filter(v => v.estado !== 'anulada')
-                .reduce((sum, v) => sum + v.total, 0)
-              const count = ventas.filter(v => v.estado !== 'anulada').length
-              const colSpan = canManage ? 3 : 3
-              return (
-                <tfoot>
-                  <tr className="bg-brand-50 border-t-2 border-brand-100">
-                    <td colSpan={colSpan} className="px-4 py-3 text-xs text-gray-500">
-                      {count} venta{count !== 1 ? 's' : ''} (excl. anuladas)
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold text-base text-brand-700">
-                      {formatCRC(totalGeneral)}
-                    </td>
-                    <td colSpan={canManage ? 3 : 2} />
-                  </tr>
-                </tfoot>
-              )
-            })()}
-          </table>
-        </div>
+            </>
+          )
+        })()}
       </div>
 
       <VentaModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
