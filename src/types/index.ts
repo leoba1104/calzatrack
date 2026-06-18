@@ -159,8 +159,11 @@ export interface Proveedor {
 export interface DetalleCompra {
   id: string
   compra_id: string
-  variante_id: string
+  variante_id: string | null
   variante?: VarianteProducto
+  producto_id: string | null
+  producto?: Producto
+  descripcion: string | null
   cantidad: number
   costo_unitario: number
   subtotal: number
@@ -177,6 +180,7 @@ export interface Compra {
   tienda?: Tienda
   estado: 'pendiente' | 'recibida' | 'anulada'
   total_pagado: number
+  factura_imagen_url: string | null
   notas: string | null
   items?: DetalleCompra[]
   created_at: string

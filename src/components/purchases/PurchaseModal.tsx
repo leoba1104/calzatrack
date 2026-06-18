@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Plus, Trash2, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Loader2, Info } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -13,33 +13,27 @@ import { formatCRC } from '@/lib/utils'
 import type { Proveedor } from '@/types'
 
 const headerSchema = z.object({
-  proveedor_id:              z.string().min(1, 'Proveedor requerido'),
-  fecha:                     z.string().min(1, 'Fecha requerida'),
-  numero_factura_proveedor:  z.string().optional(),
-  estado:                    z.enum(['pendiente', 'recibida']),
-  notas:                     z.string().optional(),
+  proveedor_id:             z.string().min(1, 'Proveedor requerido'),
+  fecha:                    z.string().min(1, 'Fecha requerida'),
+  numero_factura_proveedor: z.string().optional(),
+  estado:                   z.enum(['pendiente', 'recibida']),
+  notas:                    z.string().optional(),
 })
 
 type HeaderData = z.infer<typeof headerSchema>
 
 interface LineItem {
-  _key: string
-  variante_id: string
-  sku: string
-  nombre: string
-  talla: string | null
-  color: string | null
-  cantidad: number
+  _key:           string
+  descripcion:    string
+  marca:          string
+  categoria:      string
+  cantidad:       number
   costo_unitario: number
+  crear_producto: boolean
 }
 
-interface VarianteRow {
-  id: string
-  sku: string
-  talla: string | null
-  color: string | null
-  precio: number
-  producto: { nombre: string } | null
+function emptyLine(): LineItem {
+  return { _key: crypto.randomUUID(), descripcion: '', marca: '', categoria: '', cantidad: 1, costo_unitario: 0, crear_producto: true }
 }
 
 interface PurchaseModalProps {
@@ -51,46 +45,19 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
   const qc = useQueryClient()
   const { activeTienda } = useAuth()
 
-  const [lineItems, setLineItems] = useState<LineItem[]>([])
-  const [varSearch, setVarSearch] = useState('')
-  const [showResults, setShowResults] = useState(false)
-  const searchRef = useRef<HTMLDivElement>(null)
+  const [lines, setLines] = useState<LineItem[]>([emptyLine()])
 
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<HeaderData>({
     resolver: zodResolver(headerSchema),
-    defaultValues: {
-      proveedor_id: '',
-      fecha: new Date().toISOString().slice(0, 10),
-      numero_factura_proveedor: '',
-      estado: 'pendiente',
-      notas: '',
-    },
+    defaultValues: { proveedor_id: '', fecha: new Date().toISOString().slice(0, 10), numero_factura_proveedor: '', estado: 'pendiente', notas: '' },
   })
 
   useEffect(() => {
     if (isOpen) {
-      reset({
-        proveedor_id: '',
-        fecha: new Date().toISOString().slice(0, 10),
-        numero_factura_proveedor: '',
-        estado: 'pendiente',
-        notas: '',
-      })
-      setLineItems([])
-      setVarSearch('')
+      reset({ proveedor_id: '', fecha: new Date().toISOString().slice(0, 10), numero_factura_proveedor: '', estado: 'pendiente', notas: '' })
+      setLines([emptyLine()])
     }
   }, [isOpen, reset])
-
-  // Close search results on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setShowResults(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [])
 
   const { data: proveedores } = useQuery({
     queryKey: ['proveedores-activos'],
@@ -101,57 +68,58 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
     enabled: isOpen,
   })
 
-  const { data: varResults, isFetching: searchingVars } = useQuery({
-    queryKey: ['variantes-compra-search', varSearch],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('variantes_producto')
-        .select('id, sku, talla, color, precio, producto:productos(nombre)')
-        .or(`sku.ilike.%${varSearch}%,producto.nombre.ilike.%${varSearch}%`)
-        .eq('activo', true)
-        .limit(8)
-      return (data ?? []) as unknown as VarianteRow[]
-    },
-    enabled: varSearch.length >= 2,
-  })
-
-  function addVariante(v: VarianteRow) {
-    const already = lineItems.find((l) => l.variante_id === v.id)
-    if (already) {
-      setLineItems((prev) => prev.map((l) => l.variante_id === v.id ? { ...l, cantidad: l.cantidad + 1 } : l))
-    } else {
-      setLineItems((prev) => [...prev, {
-        _key: v.id,
-        variante_id: v.id,
-        sku: v.sku,
-        nombre: (v.producto as { nombre: string } | null)?.nombre ?? '',
-        talla: v.talla,
-        color: v.color,
-        cantidad: 1,
-        costo_unitario: v.precio,
-      }])
-    }
-    setVarSearch('')
-    setShowResults(false)
+  function updateLine(key: string, patch: Partial<LineItem>) {
+    setLines((prev) => prev.map((l) => l._key === key ? { ...l, ...patch } : l))
   }
 
-  function removeItem(key: string) {
-    setLineItems((prev) => prev.filter((l) => l._key !== key))
+  function removeLine(key: string) {
+    setLines((prev) => prev.filter((l) => l._key !== key))
   }
 
-  function updateItem(key: string, field: 'cantidad' | 'costo_unitario', value: number) {
-    setLineItems((prev) => prev.map((l) => l._key === key ? { ...l, [field]: value } : l))
-  }
-
-  const total = lineItems.reduce((sum, l) => sum + l.cantidad * l.costo_unitario, 0)
+  const total = lines.reduce((s, l) => s + l.cantidad * l.costo_unitario, 0)
 
   const mutation = useMutation({
     mutationFn: async (data: HeaderData) => {
       if (!activeTienda) throw new Error('Sin tienda activa')
-      if (!lineItems.length) throw new Error('Agrega al menos un producto')
+      const validLines = lines.filter((l) => l.descripcion.trim())
+      if (!validLines.length) throw new Error('Agrega al menos un producto')
 
-      // 1. Insert compra
-      const { data: compra, error: compraErr } = await supabase
+      // 1. Get/create marcas and categorias for lines that want a catalog entry
+      const marcaMap  = new Map<string, string>()
+      const catMap    = new Map<string, string>()
+      const marcaNames = [...new Set(validLines.filter((l) => l.crear_producto && l.marca.trim()).map((l) => l.marca.trim()))]
+      const catNames   = [...new Set(validLines.filter((l) => l.crear_producto && l.categoria.trim()).map((l) => l.categoria.trim()))]
+
+      if (marcaNames.length) {
+        await supabase.from('marcas').upsert(marcaNames.map((nombre) => ({ nombre })), { onConflict: 'nombre', ignoreDuplicates: true })
+        const { data: md } = await supabase.from('marcas').select('id, nombre').in('nombre', marcaNames)
+        md?.forEach((m) => marcaMap.set(m.nombre, m.id))
+      }
+      if (catNames.length) {
+        await supabase.from('categorias').upsert(catNames.map((nombre) => ({ nombre })), { onConflict: 'nombre', ignoreDuplicates: true })
+        const { data: cd } = await supabase.from('categorias').select('id, nombre').in('nombre', catNames)
+        cd?.forEach((c) => catMap.set(c.nombre, c.id))
+      }
+
+      // 2. Create products (inactive, no variants yet) for lines that requested it
+      const productoIdMap = new Map<string, string>() // _key → producto_id
+      for (const l of validLines.filter((l) => l.crear_producto)) {
+        const { data: p, error } = await supabase
+          .from('productos')
+          .insert({
+            nombre:       l.descripcion.trim(),
+            marca_id:     l.marca.trim()     ? (marcaMap.get(l.marca.trim())    ?? null) : null,
+            categoria_id: l.categoria.trim() ? (catMap.get(l.categoria.trim())  ?? null) : null,
+            precio_base:  l.costo_unitario,
+            activo:       false,
+          })
+          .select('id')
+          .single()
+        if (!error && p) productoIdMap.set(l._key, p.id)
+      }
+
+      // 3. Insert compra
+      const { data: compra, error: cErr } = await supabase
         .from('compras')
         .insert({
           proveedor_id:             data.proveedor_id || null,
@@ -164,42 +132,21 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
         })
         .select('id')
         .single()
-      if (compraErr || !compra) throw compraErr ?? new Error('Error al crear la compra')
+      if (cErr || !compra) throw cErr ?? new Error('Error al crear la compra')
 
-      // 2. Insert line items
-      const { error: itemsErr } = await supabase.from('detalle_compras').insert(
-        lineItems.map((l) => ({
+      // 4. Insert line items
+      const { error: iErr } = await supabase.from('detalle_compras').insert(
+        validLines.map((l) => ({
           compra_id:      compra.id,
-          variante_id:    l.variante_id,
+          descripcion:    l.descripcion.trim(),
+          producto_id:    productoIdMap.get(l._key) ?? null,
+          variante_id:    null,
           cantidad:       l.cantidad,
           costo_unitario: l.costo_unitario,
           subtotal:       l.cantidad * l.costo_unitario,
         }))
       )
-      if (itemsErr) throw itemsErr
-
-      // 3. If recibida, increment stock for each item
-      if (data.estado === 'recibida') {
-        for (const l of lineItems) {
-          const { data: row } = await supabase
-            .from('inventario_tienda')
-            .select('id, stock')
-            .eq('tienda_id', activeTienda.id)
-            .eq('variante_id', l.variante_id)
-            .maybeSingle()
-
-          if (row) {
-            await supabase
-              .from('inventario_tienda')
-              .update({ stock: row.stock + l.cantidad })
-              .eq('id', row.id)
-          } else {
-            await supabase
-              .from('inventario_tienda')
-              .insert({ tienda_id: activeTienda.id, variante_id: l.variante_id, stock: l.cantidad })
-          }
-        }
-      }
+      if (iErr) throw iErr
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['compras'] })
@@ -211,11 +158,13 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
   })
 
   const estado = watch('estado')
+  const linesWithProduct = lines.filter((l) => l.descripcion.trim() && l.crear_producto).length
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Nueva compra" size="xl">
       <form noValidate onSubmit={handleSubmit((d) => mutation.mutate(d))} className="flex flex-col">
-        {/* Header fields */}
+
+        {/* Header */}
         <div className="p-6 border-b border-gray-100 grid grid-cols-2 gap-4">
           <FormField label="Proveedor" required error={errors.proveedor_id?.message}>
             <select {...register('proveedor_id')} className={inputClass(!!errors.proveedor_id)}>
@@ -232,132 +181,117 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
             <input {...register('numero_factura_proveedor')} className={inputClass()} placeholder="FAC-0001" />
           </FormField>
 
-          <FormField label="Estado" required>
+          <FormField label="Estado">
             <select {...register('estado')} className={inputClass()}>
-              <option value="pendiente">Pendiente (aún no llega)</option>
-              <option value="recibida">Recibida (entra al inventario ahora)</option>
+              <option value="pendiente">Pendiente — aún no llega</option>
+              <option value="recibida">Recibida — llega hoy</option>
             </select>
           </FormField>
 
           <div className="col-span-2">
             <FormField label="Notas">
-              <input {...register('notas')} className={inputClass()} placeholder="Observaciones..." />
+              <input {...register('notas')} className={inputClass()} placeholder="Observaciones, condiciones de entrega..." />
             </FormField>
           </div>
         </div>
 
-        {/* Product search */}
-        <div className="px-6 pt-4 pb-2">
-          <p className="text-sm font-medium text-gray-700 mb-2">Productos</p>
-          <div className="relative" ref={searchRef}>
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              value={varSearch}
-              onChange={(e) => { setVarSearch(e.target.value); setShowResults(true) }}
-              onFocus={() => varSearch.length >= 2 && setShowResults(true)}
-              placeholder="Buscar variante por SKU o nombre..."
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-            />
-            {showResults && varSearch.length >= 2 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
-                {searchingVars ? (
-                  <div className="px-4 py-3 text-sm text-gray-400 flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />Buscando...
-                  </div>
-                ) : !varResults?.length ? (
-                  <div className="px-4 py-3 text-sm text-gray-400">Sin resultados</div>
-                ) : varResults.map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => addVariante(v)}
-                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-brand-50 text-left text-sm transition-colors"
-                  >
-                    <div>
-                      <span className="font-mono text-xs text-brand-700 mr-2">{v.sku}</span>
-                      <span className="text-gray-700">{(v.producto as { nombre: string } | null)?.nombre}</span>
-                      {(v.talla || v.color) && (
-                        <span className="text-gray-400 ml-1">
-                          {[v.talla && `T.${v.talla}`, v.color].filter(Boolean).join(' · ')}
-                        </span>
-                      )}
-                    </div>
-                    <Plus className="w-4 h-4 text-brand-400 shrink-0" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Info banner */}
+        <div className="mx-6 mt-4 flex items-start gap-2 p-3 bg-brand-50 rounded-xl border border-brand-100 text-xs text-brand-700">
+          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <p>Los productos marcados con <strong>"Crear en catálogo"</strong> se agregan como <strong>inactivos sin tallas</strong>. Cuando llegue el pedido, ve a Inventario para agregar variantes (tallas/colores) y activarlos.</p>
         </div>
 
-        {/* Line items table */}
-        <div className="px-6 pb-4 flex-1 overflow-y-auto max-h-64">
-          {lineItems.length === 0 ? (
-            <div className="text-center py-8 text-sm text-gray-400 border border-dashed border-gray-200 rounded-xl">
-              Busca y agrega productos arriba
+        {/* Line items */}
+        <div className="px-6 pt-4 pb-2 flex-1 overflow-y-auto max-h-72">
+          <div className="space-y-2">
+            {/* Header row */}
+            <div className="grid grid-cols-[2fr_1fr_1fr_100px_100px_auto_auto] gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">
+              <span>Descripción del producto</span>
+              <span>Marca</span>
+              <span>Categoría</span>
+              <span className="text-center">Cant.</span>
+              <span className="text-center">Costo unit.</span>
+              <span className="text-center">+ catálogo</span>
+              <span />
             </div>
-          ) : (
-            <table className="w-full text-sm mt-2">
-              <thead>
-                <tr className="border-b border-gray-100 text-xs text-gray-500">
-                  <th className="text-left py-2 font-medium">Producto</th>
-                  <th className="text-center py-2 font-medium w-24">Cantidad</th>
-                  <th className="text-center py-2 font-medium w-32">Costo unit.</th>
-                  <th className="text-right py-2 font-medium w-28">Subtotal</th>
-                  <th className="w-8" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {lineItems.map((l) => (
-                  <tr key={l._key}>
-                    <td className="py-2 pr-2">
-                      <p className="font-medium text-gray-800">{l.nombre}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="font-mono text-xs text-brand-700 bg-brand-50 px-1 rounded">{l.sku}</span>
-                        {l.talla && <span className="text-xs text-gray-400">T.{l.talla}</span>}
-                        {l.color && <span className="text-xs text-gray-400">· {l.color}</span>}
-                      </div>
-                    </td>
-                    <td className="py-2 px-2">
-                      <input
-                        type="number"
-                        min="1"
-                        value={l.cantidad}
-                        onChange={(e) => updateItem(l._key, 'cantidad', Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full text-center text-sm border border-gray-200 rounded-lg py-1 outline-none focus:ring-1 focus:ring-brand-500"
-                      />
-                    </td>
-                    <td className="py-2 px-2">
-                      <input
-                        type="number"
-                        min="0"
-                        value={l.costo_unitario}
-                        onChange={(e) => updateItem(l._key, 'costo_unitario', Math.max(0, parseFloat(e.target.value) || 0))}
-                        className="w-full text-center text-sm border border-gray-200 rounded-lg py-1 outline-none focus:ring-1 focus:ring-brand-500"
-                      />
-                    </td>
-                    <td className="py-2 pl-2 text-right font-semibold text-gray-800">
-                      {formatCRC(l.cantidad * l.costo_unitario)}
-                    </td>
-                    <td className="py-2 pl-2">
-                      <button type="button" onClick={() => removeItem(l._key)} className="p-1 text-gray-300 hover:text-red-500 transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+
+            {lines.map((l) => (
+              <div key={l._key} className="grid grid-cols-[2fr_1fr_1fr_100px_100px_auto_auto] gap-2 items-center">
+                <input
+                  value={l.descripcion}
+                  onChange={(e) => updateLine(l._key, { descripcion: e.target.value })}
+                  placeholder="Ej: Tenis Nike Mercurial"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <input
+                  value={l.marca}
+                  onChange={(e) => updateLine(l._key, { marca: e.target.value })}
+                  placeholder="Nike"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <input
+                  value={l.categoria}
+                  onChange={(e) => updateLine(l._key, { categoria: e.target.value })}
+                  placeholder="Tenis"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <input
+                  type="number"
+                  min="1"
+                  value={l.cantidad}
+                  onChange={(e) => updateLine(l._key, { cantidad: Math.max(1, parseInt(e.target.value) || 1) })}
+                  className="w-full text-center px-2 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  value={l.costo_unitario}
+                  onChange={(e) => updateLine(l._key, { costo_unitario: Math.max(0, parseFloat(e.target.value) || 0) })}
+                  className="w-full text-center px-2 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <div className="flex justify-center">
+                  <input
+                    type="checkbox"
+                    checked={l.crear_producto}
+                    onChange={(e) => updateLine(l._key, { crear_producto: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                    title="Crear en catálogo de productos"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeLine(l._key)}
+                  disabled={lines.length === 1}
+                  className="p-1.5 text-gray-300 hover:text-red-500 disabled:opacity-30 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setLines((prev) => [...prev, emptyLine()])}
+            className="mt-3 flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Agregar línea
+          </button>
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/50 shrink-0">
-          <div className="text-sm">
-            <span className="text-gray-500">Total: </span>
-            <span className="text-lg font-bold text-gray-900">{formatCRC(total)}</span>
-            {estado === 'recibida' && (
-              <span className="ml-3 text-xs text-green-600 font-medium">· entrará al inventario</span>
+          <div className="text-sm space-y-0.5">
+            <div>
+              <span className="text-gray-500">Total: </span>
+              <span className="text-lg font-bold text-gray-900">{formatCRC(total)}</span>
+            </div>
+            {linesWithProduct > 0 && (
+              <p className="text-xs text-brand-600">
+                {linesWithProduct} producto{linesWithProduct !== 1 ? 's' : ''} se crearán en el catálogo como inactivos
+                {estado === 'recibida' && ' · recibirás una notificación para asignar tallas'}
+              </p>
             )}
           </div>
           <div className="flex gap-3">
@@ -366,7 +300,7 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
             </button>
             <button
               type="submit"
-              disabled={mutation.isPending || !lineItems.length}
+              disabled={mutation.isPending}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-60 transition-colors"
             >
               {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
