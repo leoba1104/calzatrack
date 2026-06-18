@@ -86,13 +86,17 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
     queryFn: async () => {
       const { data } = await supabase
         .from('clientes')
-        .select('id, nombre, apellido')
+        .select('id, nombre, apellido, moroso')
         .order('nombre')
         .limit(500)
-      return (data ?? []) as Pick<Cliente, 'id' | 'nombre' | 'apellido'>[]
+      return (data ?? []) as Pick<Cliente, 'id' | 'nombre' | 'apellido' | 'moroso'>[]
     },
     enabled: isOpen,
   })
+
+  const selectedClienteId  = watch('cliente_id')
+  const selectedCliente    = clientes?.find(c => c.id === selectedClienteId)
+  const clienteEsMoroso    = selectedCliente?.moroso === true
 
   const { data: empleados } = useQuery({
     queryKey: ['empleados', activeTienda?.id],
@@ -204,6 +208,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
       if (items.length === 0) throw new Error('NO_ITEMS')
       if (estadoActual === 'pagada' && !data.metodo_pago) throw new Error('NO_PAGO')
       if (estadoActual === 'credito' && !data.cliente_id) throw new Error('NO_CLIENTE_CREDITO')
+      if (estadoActual === 'credito' && clienteEsMoroso) throw new Error('CLIENTE_MOROSO')
       const abonoInicial = data.abono_inicial ?? 0
       if ((estadoActual === 'apartado' || estadoActual === 'credito') && abonoInicial > 0 && !data.metodo_pago) throw new Error('NO_PAGO')
 
@@ -292,6 +297,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
       if (e.message === 'NO_ITEMS') toast.error('Agregue al menos un producto')
       else if (e.message === 'NO_PAGO') toast.error('Seleccione el método de pago')
       else if (e.message === 'NO_CLIENTE_CREDITO') toast.error('El crédito debe asignarse a un cliente registrado')
+      else if (e.message === 'CLIENTE_MOROSO') toast.error('No se puede crear un crédito a un cliente moroso')
       else toast.error('Error al registrar la venta')
     },
   })
@@ -314,6 +320,11 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
                   </option>
                 ))}
               </select>
+              {clienteEsMoroso && (
+                <p className="mt-1 text-xs text-red-600 font-medium">
+                  ⚠ Cliente moroso — no puede recibir créditos
+                </p>
+              )}
             </FormField>
 
             <FormField label="Empleado que atiende">
@@ -331,8 +342,8 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
               <select {...register('estado')} className={inputClass(!!errors.estado)}>
                 <option value="pagada">Pagada</option>
                 <option value="apartado">Apartado</option>
-                {/* Crédito requiere cliente registrado — solo visible cuando hay uno seleccionado */}
-                {watch('cliente_id') && <option value="credito">Crédito</option>}
+                {/* Crédito requiere cliente registrado y no moroso */}
+                {selectedClienteId && !clienteEsMoroso && <option value="credito">Crédito</option>}
                 <option value="borrador">Borrador</option>
               </select>
             </FormField>
