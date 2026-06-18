@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Eye, Tag, XCircle } from 'lucide-react'
+import { Eye, Tag, XCircle } from 'lucide-react'
 import { addDays, differenceInDays } from 'date-fns'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
-import { VentaModal } from '@/components/ventas/VentaModal'
 import { ApartadoDetailModal } from '@/components/apartados/ApartadoDetailModal'
 import type { Venta } from '@/types'
 
@@ -20,7 +19,6 @@ export function ApartadosPage() {
   const { activeTienda, canManage } = useAuth()
   const qc = useQueryClient()
 
-  const [modalOpen, setModalOpen]       = useState(false)
   const [detailVenta, setDetailVenta]   = useState<Venta | null>(null)
   const [confirmCancelar, setConfirmCancelar] = useState<string | null>(null)
 
@@ -64,20 +62,9 @@ export function ApartadosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Apartados</h1>
-          <p className="text-sm text-gray-500 mt-1">Reservas con abonos — {activeTienda?.nombre}</p>
-        </div>
-        {canManage && (
-          <button
-            onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo apartado
-          </button>
-        )}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Apartados</h1>
+        <p className="text-sm text-gray-500 mt-1">Reservas con abonos — {activeTienda?.nombre}</p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -202,12 +189,6 @@ export function ApartadosPage() {
           </table>
         )}
       </div>
-
-      <VentaModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        initialEstado="apartado"
-      />
 
       <ApartadoDetailModal
         venta={detailVenta}
