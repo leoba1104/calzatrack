@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Plus, Search, Package, Pencil, ChevronDown, ChevronRight } from 'lucide-react'
+import { useState, useMemo, Fragment } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, Search, Package, Pencil, ChevronDown, ChevronRight, Trash2, X } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, cn } from '@/lib/utils'
@@ -28,13 +29,25 @@ interface ProductoConVariantes {
   totalStock: number
 }
 
+type ConfirmTarget = { type: 'producto'; id: string } | { type: 'variante'; id: string }
+type StockFilter = 'all' | 'in' | 'out'
+type StatusFilter = 'all' | 'active' | 'inactive'
+
 export function InventoryPage() {
   const { activeTienda, canManage } = useAuth()
+  const qc = useQueryClient()
+
   const [search, setSearch] = useState('')
+  const [brandFilter, setBrandFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [stockFilter, setStockFilter] = useState<StockFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [productModal, setProductModal] = useState(false)
   const [editingProducto, setEditingProducto] = useState<Producto | null>(null)
   const [varianteModal, setVarianteModal] = useState<{ productoId: string; productoNombre: string; variante: VarianteConStock | null } | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null)
 
   const { data: inventario, isLoading } = useQuery({
     queryKey: ['inventario', activeTienda?.id],
@@ -78,16 +91,79 @@ export function InventoryPage() {
     enabled: !!activeTienda,
   })
 
+  const { data: marcas } = useQuery({
+    queryKey: ['marcas'],
+    queryFn: async () => {
+      const { data } = await supabase.from('marcas').select('id, nombre').order('nombre')
+      return (data ?? []) as { id: string; nombre: string }[]
+    },
+  })
+
+  const { data: categorias } = useQuery({
+    queryKey: ['categorias'],
+    queryFn: async () => {
+      const { data } = await supabase.from('categorias').select('id, nombre').order('nombre')
+      return (data ?? []) as { id: string; nombre: string }[]
+    },
+  })
+
+  const deleteProducto = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('productos').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventario'] })
+      toast.success('Producto eliminado')
+      setConfirmTarget(null)
+    },
+    onError: () => toast.error('Error al eliminar el producto'),
+  })
+
+  const deleteVariante = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('variantes_producto').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventario'] })
+      toast.success('Variante eliminada')
+      setConfirmTarget(null)
+    },
+    onError: () => toast.error('Error al eliminar la variante'),
+  })
+
+  const hasFilters = !!brandFilter || !!categoryFilter || stockFilter !== 'all' || statusFilter !== 'all'
+
+  function clearFilters() {
+    setBrandFilter('')
+    setCategoryFilter('')
+    setStockFilter('all')
+    setStatusFilter('all')
+    setSearch('')
+  }
+
   const filtered = useMemo(() => {
     if (!inventario) return []
-    if (!search.trim()) return inventario
-    const q = search.toLowerCase()
-    return inventario.filter((p) =>
-      p.nombre.toLowerCase().includes(q) ||
-      (p.marca as unknown as { nombre: string } | null)?.nombre.toLowerCase().includes(q) ||
-      p.variantes.some((v) => v.sku.toLowerCase().includes(q))
-    )
-  }, [inventario, search])
+    return inventario.filter((p) => {
+      if (search.trim()) {
+        const q = search.toLowerCase()
+        const marca = p.marca as { nombre: string } | null
+        const matches =
+          p.nombre.toLowerCase().includes(q) ||
+          marca?.nombre.toLowerCase().includes(q) ||
+          p.variantes.some((v) => v.sku.toLowerCase().includes(q))
+        if (!matches) return false
+      }
+      if (brandFilter && p.marca_id !== brandFilter) return false
+      if (categoryFilter && p.categoria_id !== categoryFilter) return false
+      if (stockFilter === 'in' && p.totalStock === 0) return false
+      if (stockFilter === 'out' && p.totalStock > 0) return false
+      if (statusFilter === 'active' && !p.activo) return false
+      if (statusFilter === 'inactive' && p.activo) return false
+      return true
+    })
+  }, [inventario, search, brandFilter, categoryFilter, stockFilter, statusFilter])
 
   function toggleExpand(id: string) {
     setExpanded((prev) => {
@@ -110,6 +186,12 @@ export function InventoryPage() {
     setVarianteModal({ productoId: p.id, productoNombre: p.nombre, variante: v })
   }
 
+  function isConfirming(type: ConfirmTarget['type'], id: string) {
+    return confirmTarget?.type === type && confirmTarget.id === id
+  }
+
+  const isPending = deleteProducto.isPending || deleteVariante.isPending
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -129,7 +211,9 @@ export function InventoryPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200">
-        <div className="p-4 border-b border-gray-100">
+        {/* Search + Filters */}
+        <div className="p-4 border-b border-gray-100 space-y-3">
+          {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -138,6 +222,82 @@ export function InventoryPage() {
               placeholder="Buscar por nombre, marca o SKU..."
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
             />
+          </div>
+
+          {/* Filter row */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Marca */}
+            <select
+              value={brandFilter}
+              onChange={(e) => setBrandFilter(e.target.value)}
+              className={cn(
+                'text-sm border rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white transition-colors',
+                brandFilter ? 'border-brand-500 text-brand-700 font-medium' : 'border-gray-200 text-gray-600'
+              )}
+            >
+              <option value="">Todas las marcas</option>
+              {marcas?.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+            </select>
+
+            {/* Categoría */}
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className={cn(
+                'text-sm border rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white transition-colors',
+                categoryFilter ? 'border-brand-500 text-brand-700 font-medium' : 'border-gray-200 text-gray-600'
+              )}
+            >
+              <option value="">Todas las categorías</option>
+              {categorias?.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+
+            {/* Stock toggle */}
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+              {(['all', 'in', 'out'] as StockFilter[]).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setStockFilter(v)}
+                  className={cn(
+                    'px-3 py-1.5 transition-colors',
+                    stockFilter === v
+                      ? 'bg-brand-600 text-white font-medium'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  )}
+                >
+                  {v === 'all' ? 'Todo el stock' : v === 'in' ? 'Con stock' : 'Sin stock'}
+                </button>
+              ))}
+            </div>
+
+            {/* Estado toggle */}
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+              {(['all', 'active', 'inactive'] as StatusFilter[]).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setStatusFilter(v)}
+                  className={cn(
+                    'px-3 py-1.5 transition-colors',
+                    statusFilter === v
+                      ? 'bg-brand-600 text-white font-medium'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  )}
+                >
+                  {v === 'all' ? 'Todos' : v === 'active' ? 'Activos' : 'Inactivos'}
+                </button>
+              ))}
+            </div>
+
+            {/* Clear filters */}
+            {(hasFilters || search) && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+                Limpiar
+              </button>
+            )}
           </div>
         </div>
 
@@ -168,12 +328,12 @@ export function InventoryPage() {
                   const isOpen = expanded.has(p.id)
                   const marca = p.marca as { nombre: string } | null
                   const categoria = p.categoria as { nombre: string } | null
+                  const confirmingProduct = isConfirming('producto', p.id)
 
                   return (
-                    <>
+                    <Fragment key={p.id}>
                       {/* Product row */}
                       <tr
-                        key={p.id}
                         className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors cursor-pointer"
                         onClick={() => toggleExpand(p.id)}
                       >
@@ -206,85 +366,142 @@ export function InventoryPage() {
                             {p.activo ? 'Activo' : 'Inactivo'}
                           </span>
                         </td>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-4 py-3 min-w-[120px]" onClick={(e) => e.stopPropagation()}>
                           {canManage && (
-                            <div className="flex items-center gap-1 justify-end">
-                              <button
-                                onClick={() => openEditProducto(p)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-                                title="Editar producto"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => openCreateVariante(p)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:bg-brand-50 hover:text-brand-600 transition-colors"
-                                title="Agregar variante"
-                              >
-                                <Plus className="w-4 h-4" />
-                              </button>
-                            </div>
+                            confirmingProduct ? (
+                              <div className="flex items-center gap-1 justify-end">
+                                <span className="text-xs text-gray-500 mr-1">¿Eliminar?</span>
+                                <button
+                                  onClick={() => deleteProducto.mutate(p.id)}
+                                  disabled={isPending}
+                                  className="px-2 py-1 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-60 transition-colors"
+                                >
+                                  Sí
+                                </button>
+                                <button
+                                  onClick={() => setConfirmTarget(null)}
+                                  className="px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 justify-end">
+                                <button
+                                  onClick={() => openEditProducto(p)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                                  title="Editar producto"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => openCreateVariante(p)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:bg-brand-50 hover:text-brand-600 transition-colors"
+                                  title="Agregar variante"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setConfirmTarget({ type: 'producto', id: p.id })}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                  title="Eliminar producto"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )
                           )}
                         </td>
                       </tr>
 
                       {/* Variant rows (expanded) */}
-                      {isOpen && p.variantes.map((v) => (
-                        <tr key={v.id} className="bg-purple-50/30 border-b border-gray-50 hover:bg-purple-50/50 transition-colors">
-                          <td className="px-4 py-2.5" />
-                          <td className="px-4 py-2.5 pl-8">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-xs text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded">{v.sku}</span>
-                              {v.talla && <span className="text-xs text-gray-500">Talla {v.talla}</span>}
-                              {v.color && <span className="text-xs text-gray-500">· {v.color}</span>}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5 text-gray-400 text-xs" colSpan={2}>
-                            {!v.activo && <span className="text-orange-500 text-xs">(inactiva)</span>}
-                          </td>
-                          <td className="px-4 py-2.5 text-center text-sm font-semibold text-gray-800">
-                            {formatCRC(v.precio)}
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <span className={cn(
-                              'inline-flex items-center justify-center px-2 py-0.5 rounded text-xs font-semibold',
-                              v.stock === 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
-                            )}>
-                              {v.stock}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5" colSpan={2}>
-                            {canManage && (
-                              <div className="flex items-center gap-1 justify-end">
-                                <button
-                                  onClick={() => openEditVariante(p, v)}
-                                  className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-                                  title="Editar variante"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </button>
+                      {isOpen && p.variantes.map((v) => {
+                        const confirmingVariante = isConfirming('variante', v.id)
+                        return (
+                          <tr key={v.id} className="bg-purple-50/30 border-b border-gray-50 hover:bg-purple-50/50 transition-colors">
+                            <td className="px-4 py-2.5" />
+                            <td className="px-4 py-2.5 pl-8">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded">{v.sku}</span>
+                                {v.talla && <span className="text-xs text-gray-500">Talla {v.talla}</span>}
+                                {v.color && <span className="text-xs text-gray-500">· {v.color}</span>}
+                                {!v.activo && <span className="text-orange-500 text-xs">(inactiva)</span>}
                               </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="px-4 py-2.5" colSpan={2} />
+                            <td className="px-4 py-2.5 text-center text-sm font-semibold text-gray-800">
+                              {formatCRC(v.precio)}
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              <span className={cn(
+                                'inline-flex items-center justify-center px-2 py-0.5 rounded text-xs font-semibold',
+                                v.stock === 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                              )}>
+                                {v.stock}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5" colSpan={2}>
+                              {canManage && (
+                                confirmingVariante ? (
+                                  <div className="flex items-center gap-1 justify-end">
+                                    <span className="text-xs text-gray-500 mr-1">¿Eliminar?</span>
+                                    <button
+                                      onClick={() => deleteVariante.mutate(v.id)}
+                                      disabled={isPending}
+                                      className="px-2 py-1 text-xs font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-60 transition-colors"
+                                    >
+                                      Sí
+                                    </button>
+                                    <button
+                                      onClick={() => setConfirmTarget(null)}
+                                      className="px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                                    >
+                                      No
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 justify-end">
+                                    <button
+                                      onClick={() => openEditVariante(p, v)}
+                                      className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                                      title="Editar variante"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => setConfirmTarget({ type: 'variante', id: v.id })}
+                                      className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                      title="Eliminar variante"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
 
                       {/* Empty variantes message */}
                       {isOpen && p.variantes.length === 0 && (
                         <tr className="bg-purple-50/20 border-b border-gray-50">
                           <td colSpan={8} className="px-4 py-3 pl-12 text-xs text-gray-400">
-                            Sin variantes. {canManage && (
-                              <button
-                                onClick={() => openCreateVariante(p)}
-                                className="text-brand-600 hover:underline"
-                              >
-                                Agregar la primera variante
-                              </button>
+                            Sin variantes.{canManage && (
+                              <>
+                                {' '}
+                                <button
+                                  onClick={() => openCreateVariante(p)}
+                                  className="text-brand-600 hover:underline"
+                                >
+                                  Agregar la primera variante
+                                </button>
+                              </>
                             )}
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })}
               </tbody>
