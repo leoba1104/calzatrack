@@ -5,6 +5,12 @@ import { Modal } from '@/components/ui/Modal'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
 import type { Compra, DetalleCompra } from '@/types'
 
+// jsPDF uses WinAnsi encoding (Helvetica) — ₡ (U+20A1) is not supported.
+// Use ASCII-safe "CRC" prefix with en-US comma separators for the PDF only.
+function pdfCRC(n: number) {
+  return 'CRC ' + n.toLocaleString('en-US', { maximumFractionDigits: 0 })
+}
+
 // ── PDF generation ────────────────────────────────────────────────────────────
 
 async function fetchImageAsBase64(url: string): Promise<{ data: string; format: string } | null> {
@@ -127,21 +133,21 @@ async function downloadPDF(compra: Compra) {
   pdf.text('PRODUCTOS', ML, y)
   y += 5
 
-  // Table header
-  const colDesc  = ML
-  const colQty   = ML + CW - 70
-  const colUnit  = ML + CW - 45
-  const colSub   = ML + CW
+  // Table columns (all mm from left page edge)
+  const colDesc = ML        // 20 — left-aligned text start
+  const colQty  = ML + 95   // 115 — center anchor for quantity
+  const colUnit = ML + 135  // 155 — right anchor for unit cost
+  const colSub  = ML + CW   // 190 — right anchor for subtotal
 
   pdf.setFillColor(245, 243, 255)
   pdf.rect(ML, y, CW, 7, 'F')
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(8)
   pdf.setTextColor(107, 33, 168)
-  pdf.text('DESCRIPCIÓN',    colDesc + 2,    y + 5)
-  pdf.text('CANT.',          colQty,         y + 5, { align: 'center' })
-  pdf.text('COSTO UNIT.',    colUnit + 10,   y + 5, { align: 'right' })
-  pdf.text('SUBTOTAL',       colSub,         y + 5, { align: 'right' })
+  pdf.text('DESCRIPCION',  colDesc + 2, y + 5)
+  pdf.text('CANT.',        colQty,      y + 5, { align: 'center' })
+  pdf.text('COSTO UNIT.',  colUnit,     y + 5, { align: 'right' })
+  pdf.text('SUBTOTAL',     colSub,      y + 5, { align: 'right' })
   y += 9
 
   // Table rows
@@ -159,13 +165,13 @@ async function downloadPDF(compra: Compra) {
     }
 
     pdf.setTextColor(40, 40, 40)
-    pdf.text(lines,                                  colDesc + 2,  y + 5)
+    pdf.text(lines,                     colDesc + 2, y + 5)
     pdf.setTextColor(100, 100, 100)
-    pdf.text(String(it.cantidad),                    colQty,       y + 5, { align: 'center' })
-    pdf.text(formatCRC(it.costo_unitario),           colUnit + 10, y + 5, { align: 'right' })
+    pdf.text(String(it.cantidad),       colQty,      y + 5, { align: 'center' })
+    pdf.text(pdfCRC(it.costo_unitario), colUnit,     y + 5, { align: 'right' })
     pdf.setFont('helvetica', 'bold')
     pdf.setTextColor(40, 40, 40)
-    pdf.text(formatCRC(it.subtotal),                 colSub,       y + 5, { align: 'right' })
+    pdf.text(pdfCRC(it.subtotal),                    colSub,       y + 5, { align: 'right' })
     pdf.setFont('helvetica', 'normal')
 
     y += rowH
@@ -178,7 +184,7 @@ async function downloadPDF(compra: Compra) {
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(12)
   pdf.setTextColor(30, 30, 30)
-  pdf.text(`Total: ${formatCRC(compra.total_pagado)}`, ML + CW, y, { align: 'right' })
+  pdf.text(`Total: ${pdfCRC(compra.total_pagado)}`, ML + CW, y, { align: 'right' })
 
   // ── Notes ─────────────────────────────────────────────────────────────────
   if (compra.notas) {
