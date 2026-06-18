@@ -110,7 +110,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
           monto:     saldo,
           tipo_pago: 'otro',
           fecha:     new Date().toISOString().slice(0, 10),
-          notas:     'Cancelación de deuda',
+          notas:     'Cancelación de apartado — deuda condonada',
         })
         if (pagoError) throw pagoError
       }
