@@ -1,75 +1,196 @@
-import { Printer } from 'lucide-react'
+import { useState } from 'react'
+import jsPDF from 'jspdf'
+import { Loader2, Printer } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
 import type { Compra, DetalleCompra } from '@/types'
 
-// ── PDF / Print ───────────────────────────────────────────────────────────────
+// ── PDF generation ────────────────────────────────────────────────────────────
 
-function printCompra(compra: Compra) {
+async function fetchImageAsBase64(url: string): Promise<{ data: string; format: string } | null> {
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    if (blob.type === 'application/pdf') return null // can't embed PDF-in-PDF
+    const format = blob.type.includes('png') ? 'PNG' : 'JPEG'
+    const data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload  = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+    return { data, format }
+  } catch {
+    return null
+  }
+}
+
+function getImageSize(dataUrl: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
+    img.onerror = () => resolve({ w: 1, h: 1 })
+    img.src = dataUrl
+  })
+}
+
+async function downloadPDF(compra: Compra) {
   const proveedor = (compra.proveedor as { nombre_empresa: string } | undefined)?.nombre_empresa ?? '—'
-  const items     = (compra.items ?? []) as unknown as (DetalleCompra & {
+  const items = (compra.items ?? []) as unknown as (DetalleCompra & {
     variante?: { sku: string; talla: string | null; color: string | null } | null
     producto?: { nombre: string } | null
   })[]
 
-  const rows = items.map((it) => {
+  const pdf  = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
+  const PW   = 210   // page width mm
+  const ML   = 20    // margin left
+  const MR   = 20    // margin right
+  const CW   = PW - ML - MR  // content width = 170mm
+  let y = 18
+
+  // ── Header ────────────────────────────────────────────────────────────────
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(18)
+  pdf.setTextColor(30, 30, 30)
+  pdf.text('Factura de compra', ML, y)
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(9)
+  pdf.setTextColor(130, 130, 130)
+  y += 6
+  pdf.text(
+    `CalzaTrack · generado el ${new Date().toLocaleDateString('es-CR', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+    ML, y
+  )
+
+  // divider
+  y += 5
+  pdf.setDrawColor(220, 220, 220)
+  pdf.line(ML, y, ML + CW, y)
+  y += 8
+
+  // ── Summary grid ─────────────────────────────────────────────────────────
+  const col1 = ML
+  const col2 = ML + CW / 2
+
+  function field(label: string, value: string, x: number, yPos: number) {
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8)
+    pdf.setTextColor(150, 150, 150)
+    pdf.text(label.toUpperCase(), x, yPos)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(10)
+    pdf.setTextColor(30, 30, 30)
+    pdf.text(value, x, yPos + 5)
+  }
+
+  field('Proveedor',         proveedor,                                 col1, y)
+  field('N.° factura',       compra.numero_factura_proveedor ?? '—',    col2, y)
+  y += 14
+  field('Fecha',             formatDate(compra.fecha),                  col1, y)
+  field('Estado',            compra.estado.charAt(0).toUpperCase() + compra.estado.slice(1), col2, y)
+  y += 14
+
+  pdf.setDrawColor(220, 220, 220)
+  pdf.line(ML, y, ML + CW, y)
+  y += 8
+
+  // ── Invoice image ─────────────────────────────────────────────────────────
+  if (compra.factura_imagen_url) {
+    const img = await fetchImageAsBase64(compra.factura_imagen_url)
+    if (img) {
+      const { w, h } = await getImageSize(img.data)
+      const MAX_W = CW
+      const MAX_H = 80
+      const ratio  = w / h
+      let imgW = MAX_W
+      let imgH = imgW / ratio
+      if (imgH > MAX_H) { imgH = MAX_H; imgW = imgH * ratio }
+
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(8)
+      pdf.setTextColor(150, 150, 150)
+      pdf.text('IMAGEN DE LA FACTURA ORIGINAL', ML, y)
+      y += 4
+      pdf.addImage(img.data, img.format, ML, y, imgW, imgH)
+      y += imgH + 8
+      pdf.setDrawColor(220, 220, 220)
+      pdf.line(ML, y, ML + CW, y)
+      y += 8
+    }
+  }
+
+  // ── Products table ────────────────────────────────────────────────────────
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.setTextColor(150, 150, 150)
+  pdf.text('PRODUCTOS', ML, y)
+  y += 5
+
+  // Table header
+  const colDesc  = ML
+  const colQty   = ML + CW - 70
+  const colUnit  = ML + CW - 45
+  const colSub   = ML + CW
+
+  pdf.setFillColor(245, 243, 255)
+  pdf.rect(ML, y, CW, 7, 'F')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  pdf.setTextColor(107, 33, 168)
+  pdf.text('DESCRIPCIÓN',    colDesc + 2,    y + 5)
+  pdf.text('CANT.',          colQty,         y + 5, { align: 'center' })
+  pdf.text('COSTO UNIT.',    colUnit + 10,   y + 5, { align: 'right' })
+  pdf.text('SUBTOTAL',       colSub,         y + 5, { align: 'right' })
+  y += 9
+
+  // Table rows
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(9)
+  for (const it of items) {
     const desc = it.descripcion ?? it.variante?.sku ?? it.producto?.nombre ?? '—'
-    return `
-      <tr>
-        <td>${desc}</td>
-        <td style="text-align:center">${it.cantidad}</td>
-        <td style="text-align:right">₡${it.costo_unitario.toLocaleString('es-CR')}</td>
-        <td style="text-align:right">₡${it.subtotal.toLocaleString('es-CR')}</td>
-      </tr>`
-  }).join('')
+    const lines = pdf.splitTextToSize(desc, colQty - colDesc - 4)
 
-  const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <title>Compra ${compra.numero_factura_proveedor ?? compra.id.slice(0, 8)}</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', Arial, sans-serif; color: #111; padding: 40px; font-size: 13px; }
-    h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-    .sub { color: #666; font-size: 12px; margin-bottom: 24px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-    .field label { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #999; }
-    .field p { font-size: 13px; font-weight: 600; margin-top: 2px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-    th { background: #f5f3ff; text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #6b21a8; }
-    td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
-    .total { text-align: right; font-size: 15px; font-weight: 700; margin-top: 8px; }
-    .badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 600;
-             background: ${compra.estado === 'recibida' ? '#dcfce7' : compra.estado === 'anulada' ? '#fee2e2' : '#fef9c3'};
-             color: ${compra.estado === 'recibida' ? '#166534' : compra.estado === 'anulada' ? '#991b1b' : '#854d0e'}; }
-    .notes { margin-top: 16px; padding: 12px; background: #fafafa; border-radius: 8px; font-size: 12px; color: #555; }
-  </style>
-</head>
-<body>
-  <h1>Factura de compra</h1>
-  <p class="sub">CalzaTrack — generado el ${new Date().toLocaleDateString('es-CR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-  <div class="grid">
-    <div class="field"><label>Proveedor</label><p>${proveedor}</p></div>
-    <div class="field"><label>N.° factura proveedor</label><p>${compra.numero_factura_proveedor ?? '—'}</p></div>
-    <div class="field"><label>Fecha</label><p>${formatDate(compra.fecha)}</p></div>
-    <div class="field"><label>Estado</label><p><span class="badge">${compra.estado.charAt(0).toUpperCase() + compra.estado.slice(1)}</span></p></div>
-  </div>
-  <table>
-    <thead><tr><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">Costo unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <p class="total">Total: ₡${compra.total_pagado.toLocaleString('es-CR')}</p>
-  ${compra.notas ? `<div class="notes"><strong>Notas:</strong> ${compra.notas}</div>` : ''}
-</body>
-</html>`
+    // check page break
+    const rowH = Math.max(7, lines.length * 5)
+    if (y + rowH > 270) {
+      pdf.addPage()
+      y = 20
+    }
 
-  const win = window.open('', '_blank')
-  if (!win) { alert('Activa las ventanas emergentes para imprimir'); return }
-  win.document.write(html)
-  win.document.close()
-  win.focus()
-  setTimeout(() => { win.print(); win.close() }, 400)
+    pdf.setTextColor(40, 40, 40)
+    pdf.text(lines,                                  colDesc + 2,  y + 5)
+    pdf.setTextColor(100, 100, 100)
+    pdf.text(String(it.cantidad),                    colQty,       y + 5, { align: 'center' })
+    pdf.text(formatCRC(it.costo_unitario),           colUnit + 10, y + 5, { align: 'right' })
+    pdf.setFont('helvetica', 'bold')
+    pdf.setTextColor(40, 40, 40)
+    pdf.text(formatCRC(it.subtotal),                 colSub,       y + 5, { align: 'right' })
+    pdf.setFont('helvetica', 'normal')
+
+    y += rowH
+    pdf.setDrawColor(240, 240, 240)
+    pdf.line(ML, y, ML + CW, y)
+  }
+
+  // ── Total ─────────────────────────────────────────────────────────────────
+  y += 5
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(12)
+  pdf.setTextColor(30, 30, 30)
+  pdf.text(`Total: ${formatCRC(compra.total_pagado)}`, ML + CW, y, { align: 'right' })
+
+  // ── Notes ─────────────────────────────────────────────────────────────────
+  if (compra.notas) {
+    y += 10
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9)
+    pdf.setTextColor(100, 100, 100)
+    pdf.text(`Notas: ${compra.notas}`, ML, y)
+  }
+
+  const filename = `compra-${compra.numero_factura_proveedor ?? compra.id.slice(0, 8)}.pdf`
+  pdf.save(filename)
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -92,6 +213,8 @@ const estadoLabel: Record<Compra['estado'], string> = {
 }
 
 export function CompraDetailModal({ compra, isOpen, onClose }: CompraDetailModalProps) {
+  const [downloading, setDownloading] = useState(false)
+
   if (!compra) return null
 
   const proveedor = (compra.proveedor as { nombre_empresa: string } | undefined)?.nombre_empresa
@@ -99,6 +222,15 @@ export function CompraDetailModal({ compra, isOpen, onClose }: CompraDetailModal
     variante?: { sku: string; talla: string | null; color: string | null } | null
     producto?: { nombre: string } | null
   })[]
+
+  async function handleDownload() {
+    setDownloading(true)
+    try {
+      await downloadPDF(compra!)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Detalle de compra" size="xl">
@@ -193,11 +325,14 @@ export function CompraDetailModal({ compra, isOpen, onClose }: CompraDetailModal
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 flex justify-between items-center bg-gray-50/50 shrink-0">
           <button
-            onClick={() => printCompra(compra)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors bg-white"
+            onClick={handleDownload}
+            disabled={downloading}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors bg-white disabled:opacity-60"
           >
-            <Printer className="w-4 h-4" />
-            Descargar PDF
+            {downloading
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Generando PDF...</>
+              : <><Printer className="w-4 h-4" /> Descargar PDF</>
+            }
           </button>
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
             Cerrar
