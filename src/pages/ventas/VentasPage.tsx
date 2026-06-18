@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, CalendarDays, Banknote, CreditCard, XCircle } from 'lucide-react'
+import { Plus, Search, CalendarDays, Banknote, CreditCard, XCircle, Smartphone, ArrowLeftRight } from 'lucide-react'
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
@@ -11,6 +11,36 @@ import type { Venta, VentaEstado } from '@/types'
 
 type Preset = 'hoy' | 'semana' | 'mes' | 'año' | 'custom'
 type PagoRow = { monto: number; tipo_pago: string }
+
+const metodoPagoLabel: Record<string, string> = {
+  efectivo:      'Efectivo',
+  tarjeta:       'Tarjeta',
+  sinpe:         'SINPE',
+  transferencia: 'Transfer.',
+  otro:          'Otro',
+}
+
+function MetodoBadges({ pagos }: { pagos: PagoRow[] }) {
+  const tipos = [...new Set(pagos.map(p => p.tipo_pago))]
+  if (tipos.length === 0) return <span className="text-gray-300 text-xs">—</span>
+  return (
+    <div className="flex flex-wrap gap-1">
+      {tipos.map(t => {
+        const Icon = t === 'efectivo' ? Banknote
+          : t === 'tarjeta' ? CreditCard
+          : t === 'sinpe' ? Smartphone
+          : t === 'transferencia' ? ArrowLeftRight
+          : null
+        return (
+          <span key={t} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
+            {Icon && <Icon className="w-3 h-3" />}
+            {metodoPagoLabel[t] ?? t}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
 
 function isoDate(d: Date) { return format(d, 'yyyy-MM-dd') }
 
@@ -75,7 +105,7 @@ export function VentasPage() {
           pagos:pagos_venta(monto, tipo_pago)
         `)
         .eq('tienda_id', activeTienda!.id)
-        .in('estado', ['pagada', 'apartado', 'credito'])
+        .not('estado', 'eq', 'borrador')
         .order('fecha', { ascending: false })
         .limit(1000)
 
@@ -108,12 +138,14 @@ export function VentasPage() {
   })
 
   const all    = ventas ?? []
-  const allPagos = all.flatMap(v => ((v as unknown as { pagos: PagoRow[] }).pagos ?? []))
+  // Footer sums only actual cash received (exclude anuladas)
+  const nonAnuladas = all.filter(v => v.estado !== 'anulada')
+  const allPagos = nonAnuladas.flatMap(v => ((v as unknown as { pagos: PagoRow[] }).pagos ?? []))
   const enCaja   = allPagos.filter(p => p.tipo_pago === 'efectivo').reduce((s, p) => s + p.monto, 0)
   const enCuenta = allPagos.filter(p => p.tipo_pago !== 'efectivo').reduce((s, p) => s + p.monto, 0)
   const total    = enCaja + enCuenta
 
-  const colSpan = canManage ? 7 : 6
+  const colSpan = canManage ? 8 : 7
 
   return (
     <div className="flex flex-col h-full pt-6">
@@ -201,6 +233,7 @@ export function VentasPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Empleado</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Cobrado</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Método</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
                 {canManage && <th className="px-4 py-3" />}
               </tr>
@@ -219,6 +252,7 @@ export function VentasPage() {
                 all.map((v) => {
                   const estado   = v.estado as VentaEstado
                   const config   = estadoConfig[estado]
+                  const anulada  = estado === 'anulada'
                   const cliente  = v.cliente  as { nombre: string; apellido: string | null } | null
                   const empleado = v.empleado as { nombre: string; apellido: string | null } | null
                   const vPagos   = ((v as unknown as { pagos: PagoRow[] }).pagos ?? [])
@@ -226,7 +260,7 @@ export function VentasPage() {
                     ? v.total
                     : vPagos.reduce((s, p) => s + p.monto, 0)
                   return (
-                    <tr key={v.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={v.id} className={cn('transition-colors', anulada ? 'opacity-50 bg-red-50/30' : 'hover:bg-gray-50')}>
                       <td className="px-4 py-3 font-mono text-xs font-semibold text-brand-700">{v.numero_venta}</td>
                       <td className="px-4 py-3 text-gray-700">
                         {cliente ? `${cliente.nombre} ${cliente.apellido ?? ''}`.trim() : 'Cliente general'}
@@ -236,10 +270,18 @@ export function VentasPage() {
                       </td>
                       <td className="px-4 py-3 text-gray-500">{formatDate(v.fecha)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                        {formatCRC(cobrado)}
-                        {(estado === 'apartado' || estado === 'credito') && (
-                          <p className="text-xs font-normal text-gray-400">de {formatCRC(v.total)}</p>
-                        )}
+                        {anulada
+                          ? <span className="line-through text-gray-400">{formatCRC(v.total)}</span>
+                          : <>
+                              {formatCRC(cobrado)}
+                              {(estado === 'apartado' || estado === 'credito') && (
+                                <p className="text-xs font-normal text-gray-400">de {formatCRC(v.total)}</p>
+                              )}
+                            </>
+                        }
+                      </td>
+                      <td className="px-4 py-3">
+                        <MetodoBadges pagos={vPagos} />
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', config.className)}>
@@ -248,7 +290,7 @@ export function VentasPage() {
                       </td>
                       {canManage && (
                         <td className="px-4 py-3">
-                          {estado !== 'anulada' && isAdmin && (
+                          {!anulada && isAdmin && (
                             <button
                               onClick={() => setAnulando(v)}
                               className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"

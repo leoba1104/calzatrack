@@ -24,7 +24,7 @@ export function CreditosPage() {
         .from('ventas')
         .select(`
           id, numero_venta, fecha, estado, total, notas, archivado, created_at, updated_at,
-          cliente:clientes(nombre, apellido, moroso),
+          cliente:clientes(id, nombre, apellido, moroso),
           pagos:pagos_venta(monto, tipo_pago, fecha, notas, created_at),
           items:detalle_ventas(
             id, cantidad, precio_unitario, subtotal,
