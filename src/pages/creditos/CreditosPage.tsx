@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Eye, CreditCard, Trash2, AlertTriangle } from 'lucide-react'
+import { Eye, CreditCard, Trash2, AlertTriangle, ArchiveRestore } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -14,8 +14,8 @@ export function CreditosPage() {
   const { activeTienda, canManage } = useAuth()
   const qc = useQueryClient()
 
-  const [detailVentaId, setDetailVentaId]       = useState<string | null>(null)
-  const [confirmEliminar, setConfirmEliminar]   = useState<string | null>(null)
+  const [detailVentaId, setDetailVentaId]     = useState<string | null>(null)
+  const [confirmEliminar, setConfirmEliminar] = useState<string | null>(null)
 
   const { data: creditos, isLoading } = useQuery({
     queryKey: ['creditos', activeTienda?.id],
@@ -33,7 +33,7 @@ export function CreditosPage() {
         `)
         .eq('tienda_id', activeTienda!.id)
         .eq('estado', 'credito')
-        .eq('archivado', false)
+        .order('archivado', { ascending: true })   // active first
         .order('created_at', { ascending: false })
       if (error) throw error
       return data as unknown as Venta[]
@@ -41,15 +41,19 @@ export function CreditosPage() {
     enabled: !!activeTienda,
   })
 
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['creditos'] })
+    qc.invalidateQueries({ queryKey: ['ventas'] })
+    qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
+  }
+
   const archivarMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('ventas').update({ archivado: true }).eq('id', id)
       if (error) throw error
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['creditos'] })
-      qc.invalidateQueries({ queryKey: ['ventas'] })
-      qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
+      invalidate()
       toast.success('Crédito archivado')
       setConfirmEliminar(null)
       setDetailVentaId(null)
@@ -57,11 +61,27 @@ export function CreditosPage() {
     onError: () => toast.error('Error al archivar el crédito'),
   })
 
+  const desarchivarMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('ventas').update({ archivado: false }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      invalidate()
+      toast.success('Crédito desarchivado')
+    },
+    onError: () => toast.error('Error al desarchivar el crédito'),
+  })
+
+  const activos    = creditos?.filter(v => !(v as unknown as { archivado: boolean }).archivado) ?? []
+  const archivados = creditos?.filter(v =>  (v as unknown as { archivado: boolean }).archivado) ?? []
+  const isEmpty    = !creditos?.length
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Créditos</h1>
-        <p className="text-sm text-gray-500 mt-1">Ventas a crédito activas — {activeTienda?.nombre}</p>
+        <p className="text-sm text-gray-500 mt-1">Ventas a crédito — {activeTienda?.nombre}</p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -69,12 +89,12 @@ export function CreditosPage() {
           <div className="flex items-center justify-center h-48">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500" />
           </div>
-        ) : !creditos?.length ? (
+        ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center h-48 text-center">
             <div className="w-10 h-10 bg-orange-50 rounded-2xl flex items-center justify-center mb-3">
               <CreditCard className="w-5 h-5 text-orange-500" />
             </div>
-            <p className="text-sm font-medium text-gray-700">No hay créditos activos</p>
+            <p className="text-sm font-medium text-gray-700">No hay créditos</p>
             <p className="text-xs text-gray-400 mt-1">Los créditos se crean desde la sección de Ventas</p>
           </div>
         ) : (
@@ -90,7 +110,8 @@ export function CreditosPage() {
               </tr>
             </thead>
             <tbody>
-              {creditos.map((v) => {
+              {/* Active credits */}
+              {activos.map((v) => {
                 const cliente      = v.cliente as unknown as RichCliente | null
                 const pagos        = (v.pagos ?? []) as unknown as { monto: number }[]
                 const totalAbonado = pagos.reduce((s, p) => s + p.monto, 0)
@@ -172,6 +193,70 @@ export function CreditosPage() {
                             </button>
                           )
                         )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+
+              {/* Divider when both sections have rows */}
+              {activos.length > 0 && archivados.length > 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-2 bg-gray-50 border-y border-gray-100">
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Archivados</span>
+                  </td>
+                </tr>
+              )}
+
+              {/* Archived credits — read-only */}
+              {archivados.map((v) => {
+                const cliente      = v.cliente as unknown as RichCliente | null
+                const pagos        = (v.pagos ?? []) as unknown as { monto: number }[]
+                const totalAbonado = pagos.reduce((s, p) => s + p.monto, 0)
+                const saldo        = v.total - totalAbonado
+                const porcentaje   = Math.min(100, Math.round((totalAbonado / v.total) * 100))
+                const pagado       = saldo <= 0
+
+                return (
+                  <tr key={v.id} className="border-b border-gray-100 opacity-50">
+                    <td className="px-4 py-3">
+                      <p className="font-mono text-xs font-semibold text-gray-400">{v.numero_venta}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <p className="text-sm text-gray-500">
+                          {cliente ? `${cliente.nombre} ${cliente.apellido ?? ''}`.trim() : '—'}
+                        </p>
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-500">
+                          Archivado
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-400 text-xs">{formatDate(v.fecha)}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-400">{formatCRC(v.total)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={cn('h-full rounded-full', pagado ? 'bg-green-300' : 'bg-gray-300')}
+                            style={{ width: `${porcentaje}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-300 w-8 text-right shrink-0">{porcentaje}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-400 text-sm">
+                      {pagado ? '¡Pagado!' : formatCRC(saldo)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end">
+                        <button
+                          onClick={() => desarchivarMutation.mutate(v.id)}
+                          disabled={desarchivarMutation.isPending}
+                          title="Desarchivar — vuelve a crédito activo"
+                          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-brand-600 hover:bg-brand-50 border border-gray-200 rounded-lg transition-colors disabled:opacity-40"
+                        >
+                          <ArchiveRestore className="w-3.5 h-3.5" />
+                          Desarchivar
+                        </button>
                       </div>
                     </td>
                   </tr>
