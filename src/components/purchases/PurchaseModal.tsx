@@ -214,8 +214,7 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
           </FormField>
 
           {/* Invoice image upload */}
-          <div>
-            <p className="text-xs font-medium text-gray-700 mb-1.5">Foto de la factura original</p>
+          <FormField label="Foto de la factura original">
             {imagePreview ? (
               <div className="relative inline-block">
                 <img src={imagePreview} alt="Vista previa" className="h-16 rounded-lg border border-gray-200 object-contain" />
@@ -250,7 +249,7 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
                 e.target.value = ''
               }}
             />
-          </div>
+          </FormField>
         </div>
 
         {/* Info banner */}
