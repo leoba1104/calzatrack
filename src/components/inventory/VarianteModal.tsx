@@ -28,7 +28,6 @@ const editSchema = z.object({
 })
 
 type CreateData = z.infer<typeof createSchema>
-type EditData = z.infer<typeof editSchema>
 
 interface VarianteModalProps {
   isOpen: boolean
