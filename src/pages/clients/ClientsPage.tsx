@@ -14,6 +14,19 @@ export function ClientsPage() {
   const [editing, setEditing] = useState<Cliente | null>(null)
   const [deleting, setDeleting] = useState<Cliente | null>(null)
 
+  const toggleMorosoMutation = useMutation({
+    mutationFn: async ({ id, moroso }: { id: string; moroso: boolean }) => {
+      const { error } = await supabase.from('clientes').update({ moroso }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: (_, { moroso }) => {
+      qc.invalidateQueries({ queryKey: ['clientes'] })
+      qc.invalidateQueries({ queryKey: ['creditos'] })
+      toast.success(moroso ? 'Cliente marcado como moroso' : 'Morosidad removida')
+    },
+    onError: () => toast.error('Error al actualizar — asegúrese de aplicar la migración de BD'),
+  })
+
   const { data: clientes, isLoading } = useQuery({
     queryKey: ['clientes', search],
     queryFn: async () => {
@@ -109,6 +122,14 @@ export function ClientsPage() {
                     <td className="px-4 py-3 text-gray-500">{formatDate(c.created_at)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
+                        <button
+                          onClick={() => toggleMorosoMutation.mutate({ id: c.id, moroso: !c.moroso })}
+                          disabled={toggleMorosoMutation.isPending}
+                          title={c.moroso ? 'Quitar morosidad' : 'Marcar como moroso'}
+                          className={`p-1.5 rounded-lg transition-colors ${c.moroso ? 'text-red-500 hover:bg-red-50' : 'text-gray-300 hover:bg-red-50 hover:text-red-500'}`}
+                        >
+                          <AlertTriangle className="w-4 h-4" />
+                        </button>
                         <button onClick={() => openEdit(c)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors">
                           <Pencil className="w-4 h-4" />
                         </button>

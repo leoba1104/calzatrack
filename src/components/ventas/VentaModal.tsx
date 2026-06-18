@@ -331,7 +331,8 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
               <select {...register('estado')} className={inputClass(!!errors.estado)}>
                 <option value="pagada">Pagada</option>
                 <option value="apartado">Apartado</option>
-                <option value="credito">Crédito</option>
+                {/* Crédito requiere cliente registrado — solo visible cuando hay uno seleccionado */}
+                {watch('cliente_id') && <option value="credito">Crédito</option>}
                 <option value="borrador">Borrador</option>
               </select>
             </FormField>
