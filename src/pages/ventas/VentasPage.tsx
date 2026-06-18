@@ -1,12 +1,26 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, ShoppingCart, XCircle } from 'lucide-react'
+import { Plus, Search, ShoppingCart, XCircle, CalendarDays } from 'lucide-react'
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
 import { VentaModal } from '@/components/ventas/VentaModal'
 import type { Venta, VentaEstado } from '@/types'
+
+type Preset = 'hoy' | 'semana' | 'mes' | 'año' | 'custom'
+
+function isoDate(d: Date) { return format(d, 'yyyy-MM-dd') }
+
+function presetRange(p: Preset): { from: string; to: string } | null {
+  const now = new Date()
+  if (p === 'hoy')   return { from: isoDate(startOfDay(now)),   to: isoDate(endOfDay(now)) }
+  if (p === 'semana') return { from: isoDate(startOfWeek(now, { weekStartsOn: 1 })), to: isoDate(endOfWeek(now, { weekStartsOn: 1 })) }
+  if (p === 'mes')   return { from: isoDate(startOfMonth(now)), to: isoDate(endOfMonth(now)) }
+  if (p === 'año')   return { from: isoDate(startOfYear(now)),  to: isoDate(endOfYear(now)) }
+  return null
+}
 
 const estadoConfig: Record<VentaEstado, { label: string; className: string }> = {
   borrador:  { label: 'Borrador',  className: 'bg-gray-100 text-gray-600' },
@@ -19,12 +33,19 @@ const estadoConfig: Record<VentaEstado, { label: string; className: string }> = 
 export function VentasPage() {
   const { activeTienda, canManage, isAdmin } = useAuth()
   const qc = useQueryClient()
-  const [search, setSearch] = useState('')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [anulando, setAnulando] = useState<Venta | null>(null)
+  const [search, setSearch]         = useState('')
+  const [modalOpen, setModalOpen]   = useState(false)
+  const [anulando, setAnulando]     = useState<Venta | null>(null)
+  const [preset, setPreset]         = useState<Preset>('mes')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo]     = useState('')
+
+  const dateRange = preset === 'custom'
+    ? (customFrom || customTo ? { from: customFrom, to: customTo } : null)
+    : presetRange(preset)
 
   const { data: ventas, isLoading } = useQuery({
-    queryKey: ['ventas', activeTienda?.id, search],
+    queryKey: ['ventas', activeTienda?.id, search, dateRange],
     queryFn: async () => {
       let query = supabase
         .from('ventas')
@@ -33,18 +54,14 @@ export function VentasPage() {
           cliente:clientes(nombre, apellido),
           empleado:empleados(nombre, apellido)
         `)
-        .order('created_at', { ascending: false })
-        .limit(200)
+        .order('fecha', { ascending: false })
+        .limit(500)
 
-      if (!isAdmin && activeTienda) {
-        query = query.eq('tienda_id', activeTienda.id)
-      } else if (activeTienda) {
-        query = query.eq('tienda_id', activeTienda.id)
-      }
+      query = query.eq('tienda_id', activeTienda!.id)
 
-      if (search) {
-        query = query.ilike('numero_venta', `%${search}%`)
-      }
+      if (search) query = query.ilike('numero_venta', `%${search}%`)
+      if (dateRange?.from) query = query.gte('fecha', dateRange.from)
+      if (dateRange?.to)   query = query.lte('fecha', dateRange.to + 'T23:59:59')
 
       const { data } = await query
       return (data ?? []) as unknown as Venta[]
@@ -87,16 +104,62 @@ export function VentasPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200">
-        <div className="p-4 border-b border-gray-100">
-          <div className="relative">
+        <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
+          {/* Search */}
+          <div className="relative w-52 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por número de venta..."
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+              placeholder="N.° de venta..."
+              className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
             />
           </div>
+
+          {/* Preset buttons */}
+          <div className="flex items-center gap-1 rounded-lg border border-gray-200 overflow-hidden text-sm shrink-0">
+            {(['hoy', 'semana', 'mes', 'año'] as Preset[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPreset(p)}
+                className={cn(
+                  'px-3 py-1.5 capitalize transition-colors',
+                  preset === p ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
+                )}
+              >
+                {p === 'semana' ? 'Semana' : p === 'año' ? 'Año' : p.charAt(0).toUpperCase() + p.slice(1)}
+              </button>
+            ))}
+            <button
+              onClick={() => setPreset('custom')}
+              className={cn(
+                'px-3 py-1.5 flex items-center gap-1.5 transition-colors',
+                preset === 'custom' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
+              )}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              Rango
+            </button>
+          </div>
+
+          {/* Custom date inputs */}
+          {preset === 'custom' && (
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+              />
+              <span className="text-gray-400 text-xs">—</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+              />
+            </div>
+          )}
         </div>
 
         <div className="overflow-x-auto">

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -11,8 +11,6 @@ import { formatCRC, cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
 import type { Cliente, Empleado, VentaEstado, MetodoPago } from '@/types'
-
-const IVA = 0.13
 
 const headerSchema = z.object({
   cliente_id:  z.string().optional(),
@@ -62,6 +60,18 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
   const [items, setItems] = useState<LineItem[]>([])
   const [productSearch, setProductSearch] = useState('')
   const [showProductList, setShowProductList] = useState(false)
+  const searchContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showProductList) return
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowProductList(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showProductList])
 
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<HeaderData>({
     resolver: zodResolver(headerSchema) as never,
@@ -134,8 +144,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, i) => sum + i.cantidad * i.precio_unitario, 0)
-    const impuesto = subtotal * IVA
-    return { subtotal, impuesto }
+    return { subtotal }
   }, [items])
 
   function displayName(d: DisponibleRow) {
@@ -195,8 +204,9 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
       if (estadoActual === 'pagada' && !data.metodo_pago) throw new Error('NO_PAGO')
 
       const descuento = data.descuento ?? 0
-      const { subtotal, impuesto } = totals
-      const total = subtotal + impuesto - descuento
+      const { subtotal } = totals
+      const impuesto = 0
+      const total = subtotal - descuento
 
       // 1. Get sequential number
       const { data: numData, error: numErr } = await supabase
@@ -268,7 +278,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
     },
   })
 
-  const grandTotal = totals.subtotal + totals.impuesto
+  const grandTotal = totals.subtotal
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Nueva venta" size="xl">
@@ -348,7 +358,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Agregar producto <span className="text-red-500">*</span>
               </label>
-              <div className="relative">
+              <div className="relative" ref={searchContainerRef}>
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   value={productSearch}
@@ -437,15 +447,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
         {/* Totals + submit */}
         <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-end justify-between gap-4">
           <div className="text-sm space-y-1">
-            <div className="flex gap-8">
-              <span className="text-gray-500">Subtotal</span>
-              <span className="font-medium text-gray-900 ml-auto">{formatCRC(totals.subtotal)}</span>
-            </div>
-            <div className="flex gap-8">
-              <span className="text-gray-500">IVA (13%)</span>
-              <span className="font-medium text-gray-900 ml-auto">{formatCRC(totals.impuesto)}</span>
-            </div>
-            <div className={cn('flex gap-8 text-base font-bold border-t border-gray-200 pt-1 mt-1')}>
+            <div className={cn('flex gap-8 text-base font-bold')}>
               <span className="text-gray-800">Total</span>
               <span className="text-brand-700 ml-auto">{formatCRC(grandTotal)}</span>
             </div>
