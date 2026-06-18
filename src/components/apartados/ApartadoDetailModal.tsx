@@ -74,6 +74,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['apartados'] })
+      qc.invalidateQueries({ queryKey: ['ventas'] })
       toast.success('Abono registrado')
       setMonto('')
       setNotasAbono('')

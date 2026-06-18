@@ -106,14 +106,15 @@ export function VentasPage() {
     onError: () => toast.error('Error al anular la venta'),
   })
 
-  // Summary calculations — based on non-anulada ventas
+  // Summary calculations — based on non-anulada ventas, using actual pagos received
   const all    = ventas ?? []
   const active = all.filter(v => v.estado !== 'anulada')
-  const total  = active.reduce((sum, v) => sum + v.total, 0)
 
   const allPagos = active.flatMap(v => ((v as unknown as { pagos: PagoRow[] }).pagos ?? []))
   const enCaja   = allPagos.filter(p => p.tipo_pago === 'efectivo').reduce((s, p) => s + p.monto, 0)
   const enCuenta = allPagos.filter(p => p.tipo_pago !== 'efectivo').reduce((s, p) => s + p.monto, 0)
+  // Total = sum of actual payments received (not venta.total which is full product price for apartado/credito)
+  const total = enCaja + enCuenta
 
   const colSpan = canManage ? 7 : 6
 
@@ -219,7 +220,7 @@ export function VentasPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Cliente</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Empleado</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Cobrado</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
                 {canManage && <th className="px-4 py-3" />}
               </tr>
@@ -240,6 +241,11 @@ export function VentasPage() {
                   const config   = estadoConfig[estado]
                   const cliente  = v.cliente  as { nombre: string; apellido: string | null } | null
                   const empleado = v.empleado as { nombre: string; apellido: string | null } | null
+                  const vPagos   = ((v as unknown as { pagos: PagoRow[] }).pagos ?? [])
+                  // For pagada: show full total. For others: show actual amount received so far.
+                  const cobrado  = estado === 'pagada'
+                    ? v.total
+                    : vPagos.reduce((s, p) => s + p.monto, 0)
                   return (
                     <tr key={v.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs font-semibold text-brand-700">{v.numero_venta}</td>
@@ -250,7 +256,12 @@ export function VentasPage() {
                         {empleado ? `${empleado.nombre} ${empleado.apellido ?? ''}`.trim() : '—'}
                       </td>
                       <td className="px-4 py-3 text-gray-500">{formatDate(v.fecha)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCRC(v.total)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                        {formatCRC(cobrado)}
+                        {(estado === 'apartado' || estado === 'credito') && (
+                          <p className="text-xs font-normal text-gray-400">de {formatCRC(v.total)}</p>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', config.className)}>
                           {config.label}
