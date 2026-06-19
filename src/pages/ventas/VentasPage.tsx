@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, CalendarDays, Banknote, CreditCard, XCircle, Smartphone, ArrowLeftRight } from 'lucide-react'
+import { Plus, Search, CalendarDays, Banknote, CreditCard, Smartphone, ArrowLeftRight, Eye } from 'lucide-react'
 import {
   startOfDay, endOfDay,
   startOfWeek, endOfWeek,
@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
 import { VentaModal } from '@/components/ventas/VentaModal'
+import { VentaDetailModal } from '@/components/ventas/VentaDetailModal'
 import type { VentaTipo, VentaEstado } from '@/types'
 
 type Preset = 'hoy' | 'semana' | 'mes' | 'año' | 'custom'
@@ -97,10 +98,11 @@ export function VentasPage() {
 
   const [search, setSearch]         = useState('')
   const [modalOpen, setModalOpen]   = useState(false)
-  const [preset, setPreset]         = useState<Preset>('mes')
+  const [preset, setPreset]         = useState<Preset>('hoy')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo]     = useState('')
-  const [empleadoId, setEmpleadoId] = useState('')
+  const [empleadoId, setEmpleadoId]       = useState('')
+  const [detailVentaId, setDetailVentaId] = useState<string | null>(null)
 
   const dateRange = preset === 'custom'
     ? (customFrom || customTo ? {
@@ -189,21 +191,6 @@ export function VentasPage() {
     staleTime: 0,
   })
 
-  // Mutation: anular a pagada venta (admin only, from venta id)
-  const anularMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('ventas').update({ estado: 'anulada' }).eq('id', id)
-      if (error) throw error
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['ventas'] })
-      qc.invalidateQueries({ queryKey: ['inventario'] })
-      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
-      toast.success('Venta anulada')
-    },
-    onError: () => toast.error('Error al anular la venta'),
-  })
-
   const pagoList    = pagos ?? []
   const pendingList = pendingRaw ?? []
   const isLoading   = pagosLoading || pendingLoading
@@ -212,7 +199,7 @@ export function VentasPage() {
   const enCuenta = pagoList.filter(p => p.tipo_pago !== 'efectivo').reduce((s, p) => s + p.monto, 0)
   const totalCobrado = enCaja + enCuenta
 
-  const colSpan = isAdmin ? 8 : 7
+  const colSpan = 8
 
   return (
     <div className="flex flex-col h-full pt-6">
@@ -302,7 +289,7 @@ export function VentasPage() {
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Monto</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Método</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Tipo</th>
-                {isAdmin && <th className="px-4 py-3" />}
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -353,20 +340,15 @@ export function VentasPage() {
                             {config.label}
                           </span>
                         </td>
-                        {isAdmin && (
-                          <td className="px-4 py-3">
-                            {venta.tipo === 'contado' && (
-                              <button
-                                onClick={() => anularMutation.mutate(venta.id)}
-                                disabled={anularMutation.isPending}
-                                className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
-                                title="Anular venta"
-                              >
-                                <XCircle className="w-4 h-4" />
-                              </button>
-                            )}
-                          </td>
-                        )}
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => setDetailVentaId(venta.id)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                            title="Ver detalle"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </td>
                       </tr>
                     )
                   })}
@@ -406,7 +388,15 @@ export function VentasPage() {
                                 {config.label}
                               </span>
                             </td>
-                            {isAdmin && <td className="px-4 py-3" />}
+                            <td className="px-4 py-3">
+                              <button
+                                onClick={() => setDetailVentaId(v.id)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                                title="Ver detalle"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                            </td>
                           </tr>
                         )
                       })}
@@ -446,6 +436,12 @@ export function VentasPage() {
       </div>
 
       <VentaModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
+
+      <VentaDetailModal
+        ventaId={detailVentaId}
+        isOpen={!!detailVentaId}
+        onClose={() => setDetailVentaId(null)}
+      />
     </div>
   )
 }
