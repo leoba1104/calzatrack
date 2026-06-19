@@ -48,7 +48,7 @@ export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: Cred
         .from('pagos_venta')
         .select('id, monto, tipo_pago, fecha, notas, created_at')
         .eq('venta_id', venta!.id)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
       if (error) throw error
       return data as RichPago[]
     },
@@ -80,7 +80,7 @@ export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: Cred
         venta_id:  venta!.id,
         monto:     montoNum,
         tipo_pago: tipoPago,
-        fecha:     fechaAbono,
+        fecha:     new Date(fechaAbono + 'T12:00:00').toISOString(),
         notas:     notasAbono || null,
       })
       if (error) throw error

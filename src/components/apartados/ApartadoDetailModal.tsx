@@ -55,7 +55,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
         .from('pagos_venta')
         .select('id, monto, tipo_pago, fecha, notas, created_at')
         .eq('venta_id', venta!.id)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
       if (error) throw error
       return data as RichPago[]
     },
@@ -84,7 +84,9 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
         venta_id:  venta!.id,
         monto:     montoNum,
         tipo_pago: tipoPago,
-        fecha:     fechaAbono,
+        // fechaAbono is a local date string (YYYY-MM-DD); add T12:00:00 so JS parses it
+        // as local noon — avoids UTC-midnight shift that would display as the previous day
+        fecha:     new Date(fechaAbono + 'T12:00:00').toISOString(),
         notas:     notasAbono || null,
       })
       if (error) throw error
@@ -127,7 +129,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
           venta_id:  venta!.id,
           monto:     saldo,
           tipo_pago: metodoPago,
-          fecha:     format(new Date(), 'yyyy-MM-dd'),
+          fecha:     new Date().toISOString(),
           notas:     'Cancelación de deuda',
         })
         if (pagoError) throw pagoError
