@@ -338,13 +338,12 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
               </select>
             </FormField>
 
-            <FormField label="Estado de la venta" required error={errors.estado?.message}>
+            <FormField label="Tipo de venta" required error={errors.estado?.message}>
               <select {...register('estado')} className={inputClass(!!errors.estado)}>
-                <option value="pagada">Pagada</option>
+                <option value="pagada">Normal (contado)</option>
                 <option value="apartado">Apartado</option>
                 {/* Crédito requiere cliente registrado y no moroso */}
                 {selectedClienteId && !clienteEsMoroso && <option value="credito">Crédito</option>}
-                <option value="borrador">Borrador</option>
               </select>
             </FormField>
 

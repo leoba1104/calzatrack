@@ -28,11 +28,12 @@ function presetRange(p: Preset): { from: string; to: string } | null {
   return null
 }
 
-const estadoConfig: Record<VentaEstado, { label: string; className: string }> = {
-  borrador: { label: 'Borrador',  className: 'bg-gray-100 text-gray-600' },
+// Shows the *tipo* of venta (not DB estado) — Normal=contado, Apartado, Crédito
+const tipoConfig: Record<VentaEstado, { label: string; className: string }> = {
+  borrador: { label: 'Normal',    className: 'bg-gray-100 text-gray-600' },
+  pagada:   { label: 'Normal',    className: 'bg-green-100 text-green-700' },
   apartado: { label: 'Apartado',  className: 'bg-blue-100 text-blue-700' },
   credito:  { label: 'Crédito',   className: 'bg-orange-100 text-orange-700' },
-  pagada:   { label: 'Pagada',    className: 'bg-green-100 text-green-700' },
   anulada:  { label: 'Anulada',   className: 'bg-red-100 text-red-600' },
 }
 
@@ -302,7 +303,7 @@ export function VentasPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha pago</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Monto</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Método</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Tipo</th>
                 {isAdmin && <th className="px-4 py-3" />}
               </tr>
             </thead>
@@ -321,7 +322,7 @@ export function VentasPage() {
                   {/* One row per payment */}
                   {pagoList.map((p) => {
                     const venta    = p.venta!
-                    const config   = estadoConfig[venta.estado]
+                    const config   = tipoConfig[venta.estado]
                     const cliente  = venta.cliente
                     const empleado = venta.empleado
                     const esAbono  = venta.estado === 'apartado' || venta.estado === 'credito'
@@ -383,7 +384,7 @@ export function VentasPage() {
                         </td>
                       </tr>
                       {pendingList.map((v) => {
-                        const config   = estadoConfig[v.estado]
+                        const config   = tipoConfig[v.estado]
                         const cliente  = v.cliente
                         const empleado = v.empleado
                         return (
