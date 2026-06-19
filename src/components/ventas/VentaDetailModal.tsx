@@ -34,6 +34,9 @@ type VentaDetail = {
   impuesto: number
   total: number
   notas: string | null
+  contacto_nombre:   string | null
+  contacto_apellido: string | null
+  contacto_telefono: string | null
   cliente: { nombre: string; apellido: string | null } | null
   empleado: { nombre: string; apellido: string | null } | null
   items: {
@@ -71,6 +74,7 @@ export function VentaDetailModal({ ventaId, isOpen, onClose }: VentaDetailModalP
         .from('ventas')
         .select(`
           id, numero_venta, fecha, tipo, estado, subtotal, descuento, impuesto, total, notas,
+          contacto_nombre, contacto_apellido, contacto_telefono,
           cliente:clientes(nombre, apellido),
           empleado:empleados(nombre, apellido),
           items:detalle_ventas(
@@ -133,14 +137,26 @@ export function VentaDetailModal({ ventaId, isOpen, onClose }: VentaDetailModalP
               <span className="text-xs text-gray-400 ml-1">{formatDate(venta.fecha)}</span>
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
-              <div>
-                <span className="text-gray-500">Cliente: </span>
-                <span className="text-gray-800 font-medium">
-                  {venta.cliente
-                    ? `${venta.cliente.nombre} ${venta.cliente.apellido ?? ''}`.trim()
-                    : 'Cliente general'}
-                </span>
-              </div>
+              {venta.tipo === 'apartado' && (venta.contacto_nombre || venta.contacto_apellido) ? (
+                <div className="col-span-2">
+                  <span className="text-gray-500">Contacto: </span>
+                  <span className="text-gray-800 font-medium">
+                    {`${venta.contacto_apellido ?? ''} ${venta.contacto_nombre ?? ''}`.trim()}
+                  </span>
+                  {venta.contacto_telefono && (
+                    <span className="text-gray-500 ml-2">{venta.contacto_telefono}</span>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <span className="text-gray-500">Cliente: </span>
+                  <span className="text-gray-800 font-medium">
+                    {venta.cliente
+                      ? `${venta.cliente.nombre} ${venta.cliente.apellido ?? ''}`.trim()
+                      : 'Cliente general'}
+                  </span>
+                </div>
+              )}
               <div>
                 <span className="text-gray-500">Empleado: </span>
                 <span className="text-gray-800">

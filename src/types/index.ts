@@ -136,6 +136,9 @@ export interface Venta {
   empleado?: Empleado
   tipo: VentaTipo
   estado: VentaEstado
+  contacto_nombre:   string | null
+  contacto_apellido: string | null
+  contacto_telefono: string | null
   subtotal: number
   impuesto: number
   descuento: number

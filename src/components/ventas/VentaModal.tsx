@@ -13,14 +13,18 @@ import { FormField, inputClass } from '@/components/ui/FormField'
 import type { Cliente, Empleado, VentaTipo, MetodoPago } from '@/types'
 
 const headerSchema = z.object({
-  cliente_id:    z.string().optional(),
-  empleado_id:   z.string().optional(),
-  tipo:          z.enum(['contado', 'apartado', 'credito']).default('contado'),
+  cliente_id:        z.string().optional(),
+  empleado_id:       z.string().optional(),
+  tipo:              z.enum(['contado', 'apartado', 'credito']).default('contado'),
   // z.enum rechaza "" (cadena vacía del <select>); validamos el valor real en la mutación
-  metodo_pago:   z.string().optional(),
-  descuento:     z.number().min(0).default(0),
-  abono_inicial: z.number().min(0).default(0),
-  notas:         z.string().optional(),
+  metodo_pago:       z.string().optional(),
+  descuento:         z.number().min(0).default(0),
+  abono_inicial:     z.number().min(0).default(0),
+  notas:             z.string().optional(),
+  // Contact fields — required for apartados (stored directly on the venta)
+  contacto_nombre:   z.string().optional(),
+  contacto_apellido: z.string().optional(),
+  contacto_telefono: z.string().optional(),
 })
 
 type HeaderData = z.infer<typeof headerSchema>
@@ -74,7 +78,7 @@ export function VentaModal({ isOpen, onClose, initialTipo = 'contado' }: VentaMo
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showProductList])
 
-  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<HeaderData>({
+  const { register, handleSubmit, watch, reset, setValue, formState: { errors } } = useForm<HeaderData>({
     resolver: zodResolver(headerSchema) as never,
     defaultValues: { descuento: 0, tipo: initialTipo, abono_inicial: 0 },
   })
@@ -86,17 +90,26 @@ export function VentaModal({ isOpen, onClose, initialTipo = 'contado' }: VentaMo
     queryFn: async () => {
       const { data } = await supabase
         .from('clientes')
-        .select('id, nombre, apellido, moroso')
+        .select('id, nombre, apellido, moroso, telefono')
         .order('nombre')
         .limit(500)
-      return (data ?? []) as Pick<Cliente, 'id' | 'nombre' | 'apellido' | 'moroso'>[]
+      return (data ?? []) as Pick<Cliente, 'id' | 'nombre' | 'apellido' | 'moroso' | 'telefono'>[]
     },
     enabled: isOpen,
   })
 
-  const selectedClienteId  = watch('cliente_id')
-  const selectedCliente    = clientes?.find(c => c.id === selectedClienteId)
-  const clienteEsMoroso    = selectedCliente?.moroso === true
+  const selectedClienteId = watch('cliente_id')
+  const selectedCliente   = clientes?.find(c => c.id === selectedClienteId)
+  const clienteEsMoroso   = selectedCliente?.moroso === true
+
+  // Auto-fill contact fields when a registered client is selected on an apartado
+  useEffect(() => {
+    if (tipoActual === 'apartado' && selectedCliente) {
+      setValue('contacto_nombre',   selectedCliente.nombre)
+      setValue('contacto_apellido', selectedCliente.apellido ?? '')
+      setValue('contacto_telefono', selectedCliente.telefono ?? '')
+    }
+  }, [selectedCliente, tipoActual, setValue])
 
   const { data: empleados } = useQuery({
     queryKey: ['empleados', activeTienda?.id],
@@ -209,6 +222,9 @@ export function VentaModal({ isOpen, onClose, initialTipo = 'contado' }: VentaMo
       if (tipoActual === 'contado' && !data.metodo_pago) throw new Error('NO_PAGO')
       if (tipoActual === 'credito' && !data.cliente_id) throw new Error('NO_CLIENTE_CREDITO')
       if (tipoActual === 'credito' && clienteEsMoroso) throw new Error('CLIENTE_MOROSO')
+      if (tipoActual === 'apartado' && !data.contacto_nombre?.trim())   throw new Error('NO_CONTACTO_NOMBRE')
+      if (tipoActual === 'apartado' && !data.contacto_apellido?.trim()) throw new Error('NO_CONTACTO_APELLIDO')
+      if (tipoActual === 'apartado' && !data.contacto_telefono?.trim()) throw new Error('NO_CONTACTO_TELEFONO')
       const abonoInicial = data.abono_inicial ?? 0
       if (tipoActual !== 'contado' && abonoInicial > 0 && !data.metodo_pago) throw new Error('NO_PAGO')
 
@@ -234,9 +250,12 @@ export function VentaModal({ isOpen, onClose, initialTipo = 'contado' }: VentaMo
           impuesto,
           descuento,
           total,
-          tipo:   data.tipo,
-          estado: 'pendiente',
-          notas:  data.notas || null,
+          tipo:              data.tipo,
+          estado:            'pendiente',
+          notas:             data.notas || null,
+          contacto_nombre:   data.contacto_nombre?.trim() || null,
+          contacto_apellido: data.contacto_apellido?.trim() || null,
+          contacto_telefono: data.contacto_telefono?.trim() || null,
         })
         .select('id')
         .single()
@@ -302,6 +321,9 @@ export function VentaModal({ isOpen, onClose, initialTipo = 'contado' }: VentaMo
       else if (e.message === 'NO_PAGO') toast.error('Seleccione el método de pago')
       else if (e.message === 'NO_CLIENTE_CREDITO') toast.error('El crédito debe asignarse a un cliente registrado')
       else if (e.message === 'CLIENTE_MOROSO') toast.error('No se puede crear un crédito a un cliente moroso')
+      else if (e.message === 'NO_CONTACTO_NOMBRE')   toast.error('Ingrese el nombre del cliente del apartado')
+      else if (e.message === 'NO_CONTACTO_APELLIDO') toast.error('Ingrese el apellido del cliente del apartado')
+      else if (e.message === 'NO_CONTACTO_TELEFONO') toast.error('Ingrese el teléfono del cliente del apartado')
       else toast.error('Error al registrar la venta')
     },
   })
@@ -363,6 +385,41 @@ export function VentaModal({ isOpen, onClose, initialTipo = 'contado' }: VentaMo
                   <option value="otro">Otro</option>
                 </select>
               </FormField>
+            )}
+
+            {tipoActual === 'apartado' && (
+              <div className="space-y-3 p-3 bg-purple-50 border border-purple-100 rounded-xl">
+                <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">
+                  Datos del cliente del apartado <span className="text-red-500 normal-case font-normal">* requeridos</span>
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField label="Nombre" required>
+                    <input
+                      {...register('contacto_nombre')}
+                      className={inputClass()}
+                      placeholder="Ej: María"
+                    />
+                  </FormField>
+                  <FormField label="Apellido" required>
+                    <input
+                      {...register('contacto_apellido')}
+                      className={inputClass()}
+                      placeholder="Ej: González"
+                    />
+                  </FormField>
+                </div>
+                <FormField label="Teléfono" required>
+                  <input
+                    {...register('contacto_telefono')}
+                    type="tel"
+                    className={inputClass()}
+                    placeholder="Ej: 8888-8888"
+                  />
+                </FormField>
+                <p className="text-xs text-purple-600">
+                  Si seleccionó un cliente registrado arriba, los datos se llenaron automáticamente. Puede editarlos si difieren.
+                </p>
+              </div>
             )}
 
             {tipoActual !== 'contado' && (

@@ -29,7 +29,9 @@ export function ApartadosPage() {
       const { data, error } = await supabase
         .from('ventas')
         .select(`
-          id, numero_venta, fecha, tipo, estado, total, notas, created_at, updated_at,
+          id, numero_venta, fecha, tipo, estado, total, notas,
+          contacto_nombre, contacto_apellido, contacto_telefono,
+          created_at, updated_at,
           cliente:clientes(nombre, apellido, telefono),
           pagos:pagos_venta(monto, tipo_pago, fecha, notas, created_at),
           items:detalle_ventas(
@@ -41,12 +43,17 @@ export function ApartadosPage() {
         .eq('tipo', 'apartado')
         .eq('estado', 'pendiente')
       if (error) throw error
-      // Sort alphabetically by apellido then nombre
-      return (data as unknown as Venta[]).sort((a, b) => {
+      type RichVenta = Venta & {
+        contacto_nombre:   string | null
+        contacto_apellido: string | null
+        contacto_telefono: string | null
+      }
+      // Sort alphabetically by contact apellido (stored directly on venta), fallback to cliente
+      return (data as unknown as RichVenta[]).sort((a, b) => {
         const ac = a.cliente as { apellido: string | null; nombre: string } | null
         const bc = b.cliente as { apellido: string | null; nombre: string } | null
-        const ak = (ac?.apellido ?? ac?.nombre ?? '').toLowerCase()
-        const bk = (bc?.apellido ?? bc?.nombre ?? '').toLowerCase()
+        const ak = (a.contacto_apellido ?? ac?.apellido ?? a.contacto_nombre ?? ac?.nombre ?? '').toLowerCase()
+        const bk = (b.contacto_apellido ?? bc?.apellido ?? b.contacto_nombre ?? bc?.nombre ?? '').toLowerCase()
         return ak.localeCompare(bk, 'es')
       })
     },
@@ -104,7 +111,12 @@ export function ApartadosPage() {
             </thead>
             <tbody>
               {apartados.map((v) => {
+                const rv          = v as unknown as { contacto_nombre: string | null; contacto_apellido: string | null; contacto_telefono: string | null } & Venta
                 const cliente     = v.cliente as { nombre: string; apellido: string | null; telefono: string | null } | null
+                // Prefer stored contact fields over the linked client record
+                const displayNombre   = rv.contacto_nombre   ?? cliente?.nombre   ?? null
+                const displayApellido = rv.contacto_apellido ?? cliente?.apellido ?? null
+                const displayTelefono = rv.contacto_telefono ?? cliente?.telefono ?? null
                 const pagos       = (v.pagos ?? []) as unknown as { monto: number }[]
                 const totalAbonado = pagos.reduce((s, p) => s + p.monto, 0)
                 const saldo       = v.total - totalAbonado
@@ -124,12 +136,12 @@ export function ApartadosPage() {
                     <td className="px-4 py-3">
                       <p className="font-mono text-xs font-semibold text-brand-700">{v.numero_venta}</p>
                       <p className="text-sm font-medium text-gray-800 mt-0.5">
-                        {cliente
-                          ? `${cliente.apellido ?? ''} ${cliente.nombre}`.trim()
-                          : 'Cliente general'}
+                        {displayNombre
+                          ? `${displayApellido ?? ''} ${displayNombre}`.trim()
+                          : 'Sin contacto'}
                       </p>
-                      {cliente?.telefono && (
-                        <p className="text-xs text-gray-400">{cliente.telefono}</p>
+                      {displayTelefono && (
+                        <p className="text-xs text-gray-400">{displayTelefono}</p>
                       )}
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(v.fecha)}</td>
