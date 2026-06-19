@@ -10,12 +10,12 @@ import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
-import type { Cliente, Empleado, VentaEstado, MetodoPago } from '@/types'
+import type { Cliente, Empleado, VentaTipo, MetodoPago } from '@/types'
 
 const headerSchema = z.object({
   cliente_id:    z.string().optional(),
   empleado_id:   z.string().optional(),
-  estado:        z.enum(['borrador', 'apartado', 'credito', 'pagada', 'anulada']).default('pagada'),
+  tipo:          z.enum(['contado', 'apartado', 'credito']).default('contado'),
   // z.enum rechaza "" (cadena vacía del <select>); validamos el valor real en la mutación
   metodo_pago:   z.string().optional(),
   descuento:     z.number().min(0).default(0),
@@ -51,10 +51,10 @@ interface DisponibleRow {
 interface VentaModalProps {
   isOpen: boolean
   onClose: () => void
-  initialEstado?: VentaEstado
+  initialTipo?: VentaTipo
 }
 
-export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaModalProps) {
+export function VentaModal({ isOpen, onClose, initialTipo = 'contado' }: VentaModalProps) {
   const { activeTienda } = useAuth()
   const qc = useQueryClient()
 
@@ -76,10 +76,10 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
 
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<HeaderData>({
     resolver: zodResolver(headerSchema) as never,
-    defaultValues: { descuento: 0, estado: initialEstado, abono_inicial: 0 },
+    defaultValues: { descuento: 0, tipo: initialTipo, abono_inicial: 0 },
   })
 
-  const estadoActual = watch('estado') as VentaEstado
+  const tipoActual = watch('tipo') as VentaTipo
 
   const { data: clientes } = useQuery({
     queryKey: ['clientes'],
@@ -197,7 +197,7 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
   }
 
   function handleClose() {
-    reset({ descuento: 0, estado: initialEstado, abono_inicial: 0 })
+    reset({ descuento: 0, tipo: initialTipo, abono_inicial: 0 })
     setItems([])
     setProductSearch('')
     onClose()
@@ -206,11 +206,11 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
   const mutation = useMutation({
     mutationFn: async (data: HeaderData) => {
       if (items.length === 0) throw new Error('NO_ITEMS')
-      if (estadoActual === 'pagada' && !data.metodo_pago) throw new Error('NO_PAGO')
-      if (estadoActual === 'credito' && !data.cliente_id) throw new Error('NO_CLIENTE_CREDITO')
-      if (estadoActual === 'credito' && clienteEsMoroso) throw new Error('CLIENTE_MOROSO')
+      if (tipoActual === 'contado' && !data.metodo_pago) throw new Error('NO_PAGO')
+      if (tipoActual === 'credito' && !data.cliente_id) throw new Error('NO_CLIENTE_CREDITO')
+      if (tipoActual === 'credito' && clienteEsMoroso) throw new Error('CLIENTE_MOROSO')
       const abonoInicial = data.abono_inicial ?? 0
-      if ((estadoActual === 'apartado' || estadoActual === 'credito') && abonoInicial > 0 && !data.metodo_pago) throw new Error('NO_PAGO')
+      if (tipoActual !== 'contado' && abonoInicial > 0 && !data.metodo_pago) throw new Error('NO_PAGO')
 
       const descuento = data.descuento ?? 0
       const { subtotal } = totals
@@ -222,20 +222,21 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
         .rpc('get_next_numero_venta', { p_tienda_id: activeTienda!.id })
       if (numErr) throw numErr
 
-      // 2. Insert venta as borrador (trigger fires on UPDATE only)
+      // 2. Insert venta — estado='pendiente' initially (trigger only fires on UPDATE to 'pagada')
       const { data: venta, error: ventaErr } = await supabase
         .from('ventas')
         .insert({
-          tienda_id: activeTienda!.id,
-          cliente_id: data.cliente_id || null,
-          empleado_id: data.empleado_id || null,
+          tienda_id:    activeTienda!.id,
+          cliente_id:   data.cliente_id || null,
+          empleado_id:  data.empleado_id || null,
           numero_venta: numData as string,
           subtotal,
           impuesto,
           descuento,
           total,
-          estado: 'borrador',
-          notas: data.notas || null,
+          tipo:   data.tipo,
+          estado: 'pendiente',
+          notas:  data.notas || null,
         })
         .select('id')
         .single()
@@ -244,40 +245,43 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
       // 3. Insert line items
       const { error: itemsErr } = await supabase.from('detalle_ventas').insert(
         items.map((item) => ({
-          venta_id: venta.id,
-          variante_id: item.variante_id,
-          cantidad: item.cantidad,
+          venta_id:       venta.id,
+          variante_id:    item.variante_id,
+          cantidad:       item.cantidad,
           precio_unitario: item.precio_unitario,
           descuento_item: 0,
-          subtotal: item.cantidad * item.precio_unitario,
+          subtotal:       item.cantidad * item.precio_unitario,
         }))
       )
       if (itemsErr) throw itemsErr
 
-      // 4. Update estado → triggers stock decrement
-      const { error: updateErr } = await supabase
-        .from('ventas')
-        .update({ estado: data.estado })
-        .eq('id', venta.id)
-      if (updateErr) throw updateErr
+      // 4. Contado: update estado → pagada (triggers stock decrement)
+      //    Apartado/Crédito: stay pendiente, no update needed
+      if (data.tipo === 'contado') {
+        const { error: updateErr } = await supabase
+          .from('ventas')
+          .update({ estado: 'pagada' })
+          .eq('id', venta.id)
+        if (updateErr) throw updateErr
+      }
 
       // 5. Register payment
-      if (data.estado === 'pagada' && data.metodo_pago) {
+      if (data.tipo === 'contado' && data.metodo_pago) {
         // Full payment — registers the complete total
         const { error: pagoErr } = await supabase.from('pagos_venta').insert({
-          venta_id: venta.id,
+          venta_id:   venta.id,
           empleado_id: data.empleado_id || null,
-          monto: total,
-          tipo_pago: data.metodo_pago as MetodoPago,
+          monto:      total,
+          tipo_pago:  data.metodo_pago as MetodoPago,
         })
         if (pagoErr) throw pagoErr
-      } else if ((data.estado === 'apartado' || data.estado === 'credito') && abonoInicial > 0 && data.metodo_pago) {
-        // Initial deposit — registers only what the customer paid now
+      } else if (data.tipo !== 'contado' && abonoInicial > 0 && data.metodo_pago) {
+        // Initial deposit for apartado/crédito
         const { error: pagoErr } = await supabase.from('pagos_venta').insert({
-          venta_id: venta.id,
+          venta_id:   venta.id,
           empleado_id: data.empleado_id || null,
-          monto: abonoInicial,
-          tipo_pago: data.metodo_pago as MetodoPago,
+          monto:      abonoInicial,
+          tipo_pago:  data.metodo_pago as MetodoPago,
         })
         if (pagoErr) throw pagoErr
       }
@@ -338,16 +342,16 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
               </select>
             </FormField>
 
-            <FormField label="Tipo de venta" required error={errors.estado?.message}>
-              <select {...register('estado')} className={inputClass(!!errors.estado)}>
-                <option value="pagada">Normal (contado)</option>
+            <FormField label="Tipo de venta" required error={errors.tipo?.message}>
+              <select {...register('tipo')} className={inputClass(!!errors.tipo)}>
+                <option value="contado">Normal (contado)</option>
                 <option value="apartado">Apartado</option>
                 {/* Crédito requiere cliente registrado y no moroso */}
                 {selectedClienteId && !clienteEsMoroso && <option value="credito">Crédito</option>}
               </select>
             </FormField>
 
-            {estadoActual === 'pagada' && (
+            {tipoActual === 'contado' && (
               <FormField label="Método de pago" required error={errors.metodo_pago?.message}>
                 <select {...register('metodo_pago')} className={inputClass(!!errors.metodo_pago)}>
                   <option value="">Seleccionar...</option>
@@ -360,10 +364,10 @@ export function VentaModal({ isOpen, onClose, initialEstado = 'pagada' }: VentaM
               </FormField>
             )}
 
-            {(estadoActual === 'apartado' || estadoActual === 'credito') && (
+            {tipoActual !== 'contado' && (
               <div className="space-y-3 p-3 bg-blue-50 border border-blue-100 rounded-xl">
                 <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
-                  {estadoActual === 'apartado' ? 'Enganche inicial (opcional)' : 'Pago inicial (opcional)'}
+                  {tipoActual === 'apartado' ? 'Enganche inicial (opcional)' : 'Pago inicial (opcional)'}
                 </p>
                 <FormField label="Monto abonado ahora (₡)">
                   <input

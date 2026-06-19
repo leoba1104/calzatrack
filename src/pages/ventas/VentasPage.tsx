@@ -13,7 +13,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
 import { VentaModal } from '@/components/ventas/VentaModal'
-import type { VentaEstado } from '@/types'
+import type { VentaTipo, VentaEstado } from '@/types'
 
 type Preset = 'hoy' | 'semana' | 'mes' | 'año' | 'custom'
 
@@ -28,13 +28,10 @@ function presetRange(p: Preset): { from: string; to: string } | null {
   return null
 }
 
-// Shows the *tipo* of venta (not DB estado) — Normal=contado, Apartado, Crédito
-const tipoConfig: Record<VentaEstado, { label: string; className: string }> = {
-  borrador: { label: 'Normal',    className: 'bg-gray-100 text-gray-600' },
-  pagada:   { label: 'Normal',    className: 'bg-green-100 text-green-700' },
+const tipoConfig: Record<VentaTipo, { label: string; className: string }> = {
+  contado:  { label: 'Normal',    className: 'bg-green-100 text-green-700' },
   apartado: { label: 'Apartado',  className: 'bg-blue-100 text-blue-700' },
   credito:  { label: 'Crédito',   className: 'bg-orange-100 text-orange-700' },
-  anulada:  { label: 'Anulada',   className: 'bg-red-100 text-red-600' },
 }
 
 const metodoPagoLabel: Record<string, string> = {
@@ -69,6 +66,7 @@ type RawPago = {
   venta: {
     id: string
     numero_venta: string
+    tipo: VentaTipo
     estado: VentaEstado
     total: number
     tienda_id: string
@@ -82,6 +80,7 @@ type RawPago = {
 type PendingVenta = {
   id: string
   numero_venta: string
+  tipo: VentaTipo
   estado: VentaEstado
   fecha: string
   total: number
@@ -131,7 +130,7 @@ export function VentasPage() {
         .select(`
           id, monto, tipo_pago, fecha, notas,
           venta:ventas!inner(
-            id, numero_venta, estado, total, tienda_id, empleado_id,
+            id, numero_venta, tipo, estado, total, tienda_id, empleado_id,
             cliente:clientes(nombre, apellido),
             empleado:empleados(nombre, apellido)
           )
@@ -148,10 +147,7 @@ export function VentasPage() {
 
       let rows = (data ?? []) as unknown as RawPago[]
       // Exclude anuladas/borrador, apply client-side text/empleado filters
-      rows = rows.filter(p => p.venta &&
-        p.venta.estado !== 'anulada' &&
-        p.venta.estado !== 'borrador'
-      )
+      rows = rows.filter(p => p.venta && p.venta.estado !== 'anulada')
       if (search)     rows = rows.filter(p =>
         p.venta?.numero_venta?.toLowerCase().includes(search.toLowerCase())
       )
@@ -169,13 +165,13 @@ export function VentasPage() {
       let q = supabase
         .from('ventas')
         .select(`
-          id, numero_venta, estado, fecha, total, empleado_id,
+          id, numero_venta, tipo, estado, fecha, total, empleado_id,
           cliente:clientes(nombre, apellido),
           empleado:empleados(nombre, apellido),
           pagos:pagos_venta(id)
         `)
         .eq('tienda_id', activeTienda!.id)
-        .in('estado', ['apartado', 'credito'])
+        .eq('estado', 'pendiente')
         .order('created_at', { ascending: false })
         .limit(200)
 
@@ -322,10 +318,10 @@ export function VentasPage() {
                   {/* One row per payment */}
                   {pagoList.map((p) => {
                     const venta    = p.venta!
-                    const config   = tipoConfig[venta.estado]
+                    const config   = tipoConfig[venta.tipo]
                     const cliente  = venta.cliente
                     const empleado = venta.empleado
-                    const esAbono  = venta.estado === 'apartado' || venta.estado === 'credito'
+                    const esAbono  = venta.tipo !== 'contado'
                     return (
                       <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3">
@@ -357,7 +353,7 @@ export function VentasPage() {
                         </td>
                         {isAdmin && (
                           <td className="px-4 py-3">
-                            {venta.estado === 'pagada' && (
+                            {venta.tipo === 'contado' && (
                               <button
                                 onClick={() => anularMutation.mutate(venta.id)}
                                 disabled={anularMutation.isPending}
@@ -384,7 +380,7 @@ export function VentasPage() {
                         </td>
                       </tr>
                       {pendingList.map((v) => {
-                        const config   = tipoConfig[v.estado]
+                        const config   = tipoConfig[v.tipo]
                         const cliente  = v.cliente
                         const empleado = v.empleado
                         return (

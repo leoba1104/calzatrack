@@ -23,7 +23,7 @@ export function CreditosPage() {
       const { data, error } = await supabase
         .from('ventas')
         .select(`
-          id, numero_venta, fecha, estado, total, notas, archivado, created_at, updated_at,
+          id, numero_venta, fecha, tipo, estado, total, notas, archivado, created_at, updated_at,
           cliente:clientes(id, nombre, apellido, moroso),
           pagos:pagos_venta(monto, tipo_pago, fecha, notas, created_at),
           items:detalle_ventas(
@@ -32,7 +32,7 @@ export function CreditosPage() {
           )
         `)
         .eq('tienda_id', activeTienda!.id)
-        .eq('estado', 'credito')
+        .eq('tipo', 'credito')
         .order('archivado', { ascending: true })   // active first
         .order('created_at', { ascending: false })
       if (error) throw error

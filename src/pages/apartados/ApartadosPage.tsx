@@ -29,7 +29,7 @@ export function ApartadosPage() {
       const { data, error } = await supabase
         .from('ventas')
         .select(`
-          id, numero_venta, fecha, estado, total, notas, created_at, updated_at,
+          id, numero_venta, fecha, tipo, estado, total, notas, created_at, updated_at,
           cliente:clientes(nombre, apellido),
           pagos:pagos_venta(monto, tipo_pago, fecha, notas, created_at),
           items:detalle_ventas(
@@ -38,7 +38,8 @@ export function ApartadosPage() {
           )
         `)
         .eq('tienda_id', activeTienda!.id)
-        .eq('estado', 'apartado')
+        .eq('tipo', 'apartado')
+        .eq('estado', 'pendiente')
         .order('created_at', { ascending: false })
       if (error) throw error
       return data as unknown as Venta[]

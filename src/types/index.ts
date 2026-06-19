@@ -1,6 +1,7 @@
 export type UserRole = 'admin' | 'owner' | 'employee'
 
-export type VentaEstado = 'borrador' | 'apartado' | 'credito' | 'pagada' | 'anulada'
+export type VentaTipo   = 'contado' | 'apartado' | 'credito'
+export type VentaEstado = 'pendiente' | 'pagada' | 'anulada'
 
 export type MetodoPago = 'efectivo' | 'tarjeta' | 'sinpe' | 'transferencia' | 'otro'
 
@@ -133,6 +134,7 @@ export interface Venta {
   tienda?: Tienda
   empleado_id: string | null
   empleado?: Empleado
+  tipo: VentaTipo
   estado: VentaEstado
   subtotal: number
   impuesto: number
