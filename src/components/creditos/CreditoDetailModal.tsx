@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, CheckCircle2, Loader2, Archive, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -40,7 +40,22 @@ export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: Cred
   const [fechaAbono, setFechaAbono] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [notasAbono, setNotasAbono] = useState('')
 
-  const pagos        = (venta?.pagos  ?? []) as unknown as RichPago[]
+  // Live pagos query — updates immediately after any mutation without waiting for parent refetch
+  const { data: pagosData = [] } = useQuery({
+    queryKey: ['pagos-credito', venta?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pagos_venta')
+        .select('id, monto, tipo_pago, fecha, notas, created_at')
+        .eq('venta_id', venta!.id)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      return data as RichPago[]
+    },
+    enabled: !!venta?.id && isOpen,
+  })
+
+  const pagos        = pagosData
   const items        = (venta?.items  ?? []) as unknown as RichItem[]
   const cliente      = (venta?.cliente ?? null) as RichCliente | null
   const totalAbonado = pagos.reduce((s, p) => s + p.monto, 0)
@@ -71,6 +86,7 @@ export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: Cred
       if (error) throw error
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pagos-credito', venta?.id] })
       invalidate()
       toast.success('Abono registrado')
       setMonto('')

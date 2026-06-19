@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, CheckCircle2, Loader2, Ban } from 'lucide-react'
 import { addDays, differenceInDays, format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -47,8 +47,23 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
   const [showCancelar, setShowCancelar]     = useState(false)
   const [metodoCancelacion, setMetodoCancelacion] = useState<MetodoPago>('efectivo')
 
+  // Live pagos query — updates immediately after any mutation without waiting for parent refetch
+  const { data: pagosData = [] } = useQuery({
+    queryKey: ['pagos-apartado', venta?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pagos_venta')
+        .select('id, monto, tipo_pago, fecha, notas, created_at')
+        .eq('venta_id', venta!.id)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      return data as RichPago[]
+    },
+    enabled: !!venta?.id && isOpen,
+  })
+
   // Derived values — safe to compute even when venta is null (guarded below)
-  const pagos        = (venta?.pagos  ?? []) as unknown as RichPago[]
+  const pagos        = pagosData
   const items        = (venta?.items  ?? []) as unknown as RichItem[]
   const cliente      = (venta?.cliente ?? null) as { nombre: string; apellido: string | null } | null
   const totalAbonado = pagos.reduce((s, p) => s + p.monto, 0)
@@ -75,6 +90,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
       if (error) throw error
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pagos-apartado', venta?.id] })
       qc.invalidateQueries({ queryKey: ['apartados'] })
       qc.invalidateQueries({ queryKey: ['ventas'] })
       qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
@@ -93,6 +109,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
       if (error) throw error
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pagos-apartado', venta?.id] })
       qc.invalidateQueries({ queryKey: ['apartados'] })
       qc.invalidateQueries({ queryKey: ['ventas'] })
       qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
@@ -119,6 +136,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
       if (error) throw error
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pagos-apartado', venta?.id] })
       qc.invalidateQueries({ queryKey: ['apartados'] })
       qc.invalidateQueries({ queryKey: ['ventas'] })
       qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
