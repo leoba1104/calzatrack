@@ -37,7 +37,7 @@ export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: Cred
   const [showAbono, setShowAbono]   = useState(false)
   const [monto, setMonto]           = useState('')
   const [tipoPago, setTipoPago]     = useState<MetodoPago>('efectivo')
-  const [fechaAbono, setFechaAbono] = useState(new Date().toISOString().slice(0, 10))
+  const [fechaAbono, setFechaAbono] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [notasAbono, setNotasAbono] = useState('')
 
   const pagos        = (venta?.pagos  ?? []) as unknown as RichPago[]
@@ -75,7 +75,7 @@ export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: Cred
       toast.success('Abono registrado')
       setMonto('')
       setNotasAbono('')
-      setFechaAbono(new Date().toISOString().slice(0, 10))
+      setFechaAbono(format(new Date(), 'yyyy-MM-dd'))
       setShowAbono(false)
     },
     onError: (e: Error) => toast.error(e.message || 'Error al registrar el abono'),

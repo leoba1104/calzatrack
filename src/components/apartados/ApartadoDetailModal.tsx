@@ -42,7 +42,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
   const [showAbono, setShowAbono]           = useState(false)
   const [monto, setMonto]                   = useState('')
   const [tipoPago, setTipoPago]             = useState<MetodoPago>('efectivo')
-  const [fechaAbono, setFechaAbono]         = useState(new Date().toISOString().slice(0, 10))
+  const [fechaAbono, setFechaAbono]         = useState(format(new Date(), 'yyyy-MM-dd'))
   const [notasAbono, setNotasAbono]         = useState('')
   const [showCancelar, setShowCancelar]     = useState(false)
   const [metodoCancelacion, setMetodoCancelacion] = useState<MetodoPago>('efectivo')
@@ -81,7 +81,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
       toast.success('Abono registrado')
       setMonto('')
       setNotasAbono('')
-      setFechaAbono(new Date().toISOString().slice(0, 10))
+      setFechaAbono(format(new Date(), 'yyyy-MM-dd'))
       setShowAbono(false)
     },
     onError: (e: Error) => toast.error(e.message || 'Error al registrar el abono'),
@@ -110,7 +110,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
           venta_id:  venta!.id,
           monto:     saldo,
           tipo_pago: metodoPago,
-          fecha:     new Date().toISOString().slice(0, 10),
+          fecha:     format(new Date(), 'yyyy-MM-dd'),
           notas:     'Cancelación de deuda',
         })
         if (pagoError) throw pagoError
