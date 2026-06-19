@@ -306,7 +306,8 @@ export function VentaModal({ isOpen, onClose, initialTipo = 'contado' }: VentaMo
     },
   })
 
-  const grandTotal = totals.subtotal
+  const descuentoActual = watch('descuento') ?? 0
+  const grandTotal = Math.max(0, totals.subtotal - (descuentoActual || 0))
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Nueva venta" size="xl">
@@ -510,10 +511,23 @@ export function VentaModal({ isOpen, onClose, initialTipo = 'contado' }: VentaMo
 
         {/* Totals + submit */}
         <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-end justify-between gap-4">
-          <div className="text-sm space-y-1">
-            <div className={cn('flex gap-8 text-base font-bold')}>
+          <div className="text-sm space-y-1 min-w-[200px]">
+            {descuentoActual > 0 && (
+              <>
+                <div className="flex justify-between gap-8 text-gray-500">
+                  <span>Subtotal</span>
+                  <span>{formatCRC(totals.subtotal)}</span>
+                </div>
+                <div className="flex justify-between gap-8 text-green-600 font-medium">
+                  <span>Descuento</span>
+                  <span>−{formatCRC(descuentoActual)}</span>
+                </div>
+                <div className="border-t border-gray-200 pt-1" />
+              </>
+            )}
+            <div className="flex justify-between gap-8 text-base font-bold">
               <span className="text-gray-800">Total</span>
-              <span className="text-brand-700 ml-auto">{formatCRC(grandTotal)}</span>
+              <span className="text-brand-700">{formatCRC(grandTotal)}</span>
             </div>
           </div>
 

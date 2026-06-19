@@ -6,7 +6,6 @@ import {
   startOfWeek, endOfWeek,
   startOfMonth, endOfMonth,
   startOfYear, endOfYear,
-  format,
 } from 'date-fns'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
@@ -17,14 +16,14 @@ import type { VentaTipo, VentaEstado } from '@/types'
 
 type Preset = 'hoy' | 'semana' | 'mes' | 'año' | 'custom'
 
-function isoDate(d: Date) { return format(d, 'yyyy-MM-dd') }
-
+// Use full ISO strings (with UTC offset derived from local TZ) so Supabase TIMESTAMPTZ
+// comparisons respect Costa Rica time instead of treating bare dates as UTC midnight.
 function presetRange(p: Preset): { from: string; to: string } | null {
   const now = new Date()
-  if (p === 'hoy')    return { from: isoDate(startOfDay(now)),  to: isoDate(endOfDay(now)) }
-  if (p === 'semana') return { from: isoDate(startOfWeek(now, { weekStartsOn: 1 })), to: isoDate(endOfWeek(now, { weekStartsOn: 1 })) }
-  if (p === 'mes')    return { from: isoDate(startOfMonth(now)), to: isoDate(endOfMonth(now)) }
-  if (p === 'año')    return { from: isoDate(startOfYear(now)),  to: isoDate(endOfYear(now)) }
+  if (p === 'hoy')    return { from: startOfDay(now).toISOString(),                          to: endOfDay(now).toISOString() }
+  if (p === 'semana') return { from: startOfWeek(now, { weekStartsOn: 1 }).toISOString(),     to: endOfWeek(now, { weekStartsOn: 1 }).toISOString() }
+  if (p === 'mes')    return { from: startOfMonth(now).toISOString(),                         to: endOfMonth(now).toISOString() }
+  if (p === 'año')    return { from: startOfYear(now).toISOString(),                          to: endOfYear(now).toISOString() }
   return null
 }
 
@@ -104,7 +103,10 @@ export function VentasPage() {
   const [empleadoId, setEmpleadoId] = useState('')
 
   const dateRange = preset === 'custom'
-    ? (customFrom || customTo ? { from: customFrom, to: customTo } : null)
+    ? (customFrom || customTo ? {
+        from: customFrom ? new Date(customFrom + 'T00:00:00').toISOString() : '',
+        to:   customTo   ? new Date(customTo   + 'T23:59:59').toISOString() : '',
+      } : null)
     : presetRange(preset)
 
   const { data: empleados } = useQuery({
@@ -140,7 +142,7 @@ export function VentasPage() {
         .limit(1000)
 
       if (dateRange?.from) q = q.gte('fecha', dateRange.from)
-      if (dateRange?.to)   q = q.lte('fecha', dateRange.to + 'T23:59:59')
+      if (dateRange?.to)   q = q.lte('fecha', dateRange.to)
 
       const { data, error } = await q
       if (error) throw error
