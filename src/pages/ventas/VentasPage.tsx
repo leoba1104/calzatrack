@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Plus, Search, CalendarDays, Banknote, CreditCard, Smartphone, ArrowLeftRight, Eye } from 'lucide-react'
 import {
   startOfDay, endOfDay,
@@ -7,7 +7,6 @@ import {
   startOfMonth, endOfMonth,
   startOfYear, endOfYear,
 } from 'date-fns'
-import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
@@ -93,8 +92,7 @@ type PendingVenta = {
 interface EmpleadoOption { id: string; nombre: string; apellido: string | null }
 
 export function VentasPage() {
-  const { activeTienda, isAdmin } = useAuth()
-  const qc = useQueryClient()
+  const { activeTienda } = useAuth()
 
   const [search, setSearch]         = useState('')
   const [modalOpen, setModalOpen]   = useState(false)

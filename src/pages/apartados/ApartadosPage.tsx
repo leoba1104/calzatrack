@@ -30,7 +30,7 @@ export function ApartadosPage() {
         .from('ventas')
         .select(`
           id, numero_venta, fecha, tipo, estado, total, notas, created_at, updated_at,
-          cliente:clientes(nombre, apellido),
+          cliente:clientes(nombre, apellido, telefono),
           pagos:pagos_venta(monto, tipo_pago, fecha, notas, created_at),
           items:detalle_ventas(
             id, cantidad, precio_unitario, subtotal,
@@ -40,9 +40,15 @@ export function ApartadosPage() {
         .eq('tienda_id', activeTienda!.id)
         .eq('tipo', 'apartado')
         .eq('estado', 'pendiente')
-        .order('created_at', { ascending: false })
       if (error) throw error
-      return data as unknown as Venta[]
+      // Sort alphabetically by apellido then nombre
+      return (data as unknown as Venta[]).sort((a, b) => {
+        const ac = a.cliente as { apellido: string | null; nombre: string } | null
+        const bc = b.cliente as { apellido: string | null; nombre: string } | null
+        const ak = (ac?.apellido ?? ac?.nombre ?? '').toLowerCase()
+        const bk = (bc?.apellido ?? bc?.nombre ?? '').toLowerCase()
+        return ak.localeCompare(bk, 'es')
+      })
     },
     enabled: !!activeTienda,
   })
@@ -98,7 +104,7 @@ export function ApartadosPage() {
             </thead>
             <tbody>
               {apartados.map((v) => {
-                const cliente     = v.cliente as { nombre: string; apellido: string | null } | null
+                const cliente     = v.cliente as { nombre: string; apellido: string | null; telefono: string | null } | null
                 const pagos       = (v.pagos ?? []) as unknown as { monto: number }[]
                 const totalAbonado = pagos.reduce((s, p) => s + p.monto, 0)
                 const saldo       = v.total - totalAbonado
@@ -117,9 +123,14 @@ export function ApartadosPage() {
                   <tr key={v.id} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
                     <td className="px-4 py-3">
                       <p className="font-mono text-xs font-semibold text-brand-700">{v.numero_venta}</p>
-                      <p className="text-sm text-gray-700 mt-0.5">
-                        {cliente ? `${cliente.nombre} ${cliente.apellido ?? ''}`.trim() : 'Cliente general'}
+                      <p className="text-sm font-medium text-gray-800 mt-0.5">
+                        {cliente
+                          ? `${cliente.apellido ?? ''} ${cliente.nombre}`.trim()
+                          : 'Cliente general'}
                       </p>
+                      {cliente?.telefono && (
+                        <p className="text-xs text-gray-400">{cliente.telefono}</p>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(v.fecha)}</td>
                     <td className="px-4 py-3">
