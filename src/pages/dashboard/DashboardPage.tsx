@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { TrendingUp, ShoppingBag, Tag, Package, AlertTriangle, Wallet, StickyNote } from 'lucide-react'
 import {
@@ -51,7 +51,9 @@ export function DashboardPage() {
   const [notaText, setNotaText] = useState<string | null>(null)
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const { data: notaData } = useQuery({
+  type NotaData = { contenido: string | null; updated_at: string }
+
+  const { data: notaData } = useQuery<NotaData | null>({
     queryKey: ['notas-tienda', activeTienda?.id],
     queryFn: async () => {
       const { data } = await supabase
@@ -59,13 +61,16 @@ export function DashboardPage() {
         .select('contenido, updated_at')
         .eq('tienda_id', activeTienda!.id)
         .maybeSingle()
-      return data as { contenido: string | null; updated_at: string } | null
+      return data as NotaData | null
     },
     enabled: !!activeTienda,
-    onSuccess: (d) => {
-      if (notaText === null) setNotaText(d?.contenido ?? '')
-    },
-  } as Parameters<typeof useQuery>[0])
+  })
+
+  useEffect(() => {
+    if (notaData !== undefined && notaText === null) {
+      setNotaText(notaData?.contenido ?? '')
+    }
+  }, [notaData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const notaMutation = useMutation({
     mutationFn: async (contenido: string) => {
