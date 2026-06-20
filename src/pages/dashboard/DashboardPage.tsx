@@ -80,7 +80,7 @@ export function DashboardPage() {
         .eq('tipo', 'apartado')
         .eq('estado', 'pendiente')
       if (error) throw error
-      return data as {
+      return data as unknown as {
         id: string
         created_at: string
         contacto_nombre: string | null
@@ -100,7 +100,7 @@ export function DashboardPage() {
         .eq('tienda_id', activeTienda!.id)
         .gt('stock', 0)
       if (error) throw error
-      return data as { stock: number; variante: { precio: number } }[]
+      return data as unknown as { stock: number; variante: { precio: number } }[]
     },
     enabled: !!activeTienda,
   })
