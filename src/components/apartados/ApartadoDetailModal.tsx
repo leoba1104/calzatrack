@@ -82,13 +82,19 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
       const montoNum = parseFloat(monto)
       if (!montoNum || montoNum <= 0) throw new Error('Monto inválido')
       if (montoNum > saldo + 0.01) throw new Error(`El monto no puede superar el saldo (${formatCRC(saldo)})`)
+      // If the user picked today, use the exact current timestamp so the row
+      // sorts at the top of VentasPage (which orders by pagos_venta.fecha DESC).
+      // For past dates use local noon to avoid UTC-midnight timezone shift.
+      const today    = format(new Date(), 'yyyy-MM-dd')
+      const fechaISO = fechaAbono === today
+        ? new Date().toISOString()
+        : new Date(fechaAbono + 'T12:00:00').toISOString()
+
       const { error } = await supabase.from('pagos_venta').insert({
         venta_id:  venta!.id,
         monto:     montoNum,
         tipo_pago: tipoPago,
-        // fechaAbono is a local date string (YYYY-MM-DD); add T12:00:00 so JS parses it
-        // as local noon — avoids UTC-midnight shift that would display as the previous day
-        fecha:     new Date(fechaAbono + 'T12:00:00').toISOString(),
+        fecha:     fechaISO,
         notas:     notasAbono || null,
       })
       if (error) throw error
