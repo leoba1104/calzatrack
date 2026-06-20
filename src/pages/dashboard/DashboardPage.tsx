@@ -1,119 +1,275 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Package, ShoppingCart, Users, AlertTriangle, TrendingUp } from 'lucide-react'
+import { TrendingUp, ShoppingBag, Tag, Package, AlertTriangle, Wallet } from 'lucide-react'
+import {
+  startOfDay, endOfDay,
+  startOfMonth, endOfMonth,
+  startOfYear, endOfYear,
+  addDays, differenceInDays,
+} from 'date-fns'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { formatCRC } from '@/lib/utils'
+import { formatCRC, cn } from '@/lib/utils'
 
-interface StatCardProps {
-  label: string
-  value: string | number
-  icon: React.ElementType
-  color: string
-  bg: string
+type Periodo = 'hoy' | 'mes' | 'año'
+
+function periodoRange(p: Periodo) {
+  const now = new Date()
+  if (p === 'hoy') return { from: startOfDay(now).toISOString(), to: endOfDay(now).toISOString() }
+  if (p === 'mes') return { from: startOfMonth(now).toISOString(), to: endOfMonth(now).toISOString() }
+  return { from: startOfYear(now).toISOString(), to: endOfYear(now).toISOString() }
 }
 
-function StatCard({ label, value, icon: Icon, color, bg }: StatCardProps) {
+interface KpiCardProps {
+  label: string
+  value: string | number
+  sub?: string
+  icon: React.ElementType
+  iconColor: string
+  iconBg: string
+}
+
+function KpiCard({ label, value, sub, icon: Icon, iconColor, iconBg }: KpiCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="bg-white rounded-xl border border-gray-100 p-5">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium text-gray-500">{label}</span>
-        <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center`}>
-          <Icon className={`w-5 h-5 ${color}`} />
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider leading-tight">{label}</span>
+        <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', iconBg)}>
+          <Icon className={cn('w-5 h-5', iconColor)} />
         </div>
       </div>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
+      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
     </div>
   )
 }
 
 export function DashboardPage() {
   const { activeTienda } = useAuth()
+  const [periodo, setPeriodo] = useState<Periodo>('mes')
 
-  const { data: stats } = useQuery({
-    queryKey: ['dashboard-stats', activeTienda?.id],
+  const range = periodoRange(periodo)
+
+  const { data: ventasData, isLoading: loadingVentas } = useQuery({
+    queryKey: ['dashboard-ventas', activeTienda?.id, periodo],
     queryFn: async () => {
-      if (!activeTienda) return null
-
-      const [variantesRes, clientesRes, ventasRes, sinStockRes] = await Promise.all([
-        supabase
-          .from('inventario_tienda')
-          .select('id', { count: 'exact', head: true })
-          .eq('tienda_id', activeTienda.id),
-        supabase
-          .from('clientes')
-          .select('id', { count: 'exact', head: true }),
-        supabase
-          .from('ventas')
-          .select('total')
-          .eq('tienda_id', activeTienda.id)
-          .eq('estado', 'pagada'),
-        supabase
-          .from('inventario_tienda')
-          .select('id', { count: 'exact', head: true })
-          .eq('tienda_id', activeTienda.id)
-          .eq('stock', 0),
-      ])
-
-      const totalVentas = ventasRes.data?.reduce((sum, v) => sum + v.total, 0) ?? 0
-
-      return {
-        variantes: variantesRes.count ?? 0,
-        clientes: clientesRes.count ?? 0,
-        ventas: totalVentas,
-        sinStock: sinStockRes.count ?? 0,
-      }
+      const { data, error } = await supabase
+        .from('ventas')
+        .select('total, items:detalle_ventas(cantidad)')
+        .eq('tienda_id', activeTienda!.id)
+        .eq('estado', 'pagada')
+        .gte('fecha', range.from)
+        .lte('fecha', range.to)
+      if (error) throw error
+      return data as { total: number; items: { cantidad: number }[] }[]
     },
     enabled: !!activeTienda,
   })
 
+  const { data: apartadosData, isLoading: loadingApartados } = useQuery({
+    queryKey: ['dashboard-apartados', activeTienda?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ventas')
+        .select(`
+          id, created_at,
+          contacto_nombre, contacto_apellido,
+          cliente:clientes(nombre, apellido)
+        `)
+        .eq('tienda_id', activeTienda!.id)
+        .eq('tipo', 'apartado')
+        .eq('estado', 'pendiente')
+      if (error) throw error
+      return data as {
+        id: string
+        created_at: string
+        contacto_nombre: string | null
+        contacto_apellido: string | null
+        cliente: { nombre: string; apellido: string | null } | null
+      }[]
+    },
+    enabled: !!activeTienda,
+  })
+
+  const { data: inventarioData, isLoading: loadingInventario } = useQuery({
+    queryKey: ['dashboard-inventario', activeTienda?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inventario_tienda')
+        .select('stock, variante:variantes_producto!inner(precio)')
+        .eq('tienda_id', activeTienda!.id)
+        .gt('stock', 0)
+      if (error) throw error
+      return data as { stock: number; variante: { precio: number } }[]
+    },
+    enabled: !!activeTienda,
+  })
+
+  const totalVentas   = ventasData?.reduce((s, v) => s + v.total, 0) ?? 0
+  const paresVendidos = ventasData?.reduce(
+    (s, v) => s + v.items.reduce((si, i) => si + i.cantidad, 0), 0
+  ) ?? 0
+
+  const now       = new Date()
+  const apartados = apartadosData ?? []
+
+  const vencidos = apartados.filter((a) => differenceInDays(addDays(new Date(a.created_at), 60), now) < 0)
+  const proximos = apartados.filter((a) => {
+    const dias = differenceInDays(addDays(new Date(a.created_at), 60), now)
+    return dias >= 0 && dias <= 7
+  })
+
+  const totalPares      = inventarioData?.reduce((s, i) => s + i.stock, 0) ?? 0
+  const valorInventario = inventarioData?.reduce((s, i) => s + i.stock * i.variante.precio, 0) ?? 0
+
+  const periodoLabel = { hoy: 'hoy', mes: 'este mes', año: 'este año' }[periodo]
+
+  const alertas = [
+    ...vencidos.map((a) => ({ ...a, tipo: 'vencido' as const })),
+    ...proximos.map((a) => ({ ...a, tipo: 'proximo' as const })),
+  ]
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {activeTienda?.nombre ?? 'Bienvenido a CalzaTrack'}
-        </p>
-      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          label="Referencias en inventario"
-          value={stats?.variantes ?? '—'}
-          icon={Package}
-          color="text-blue-600"
-          bg="bg-blue-50"
-        />
-        <StatCard
-          label="Clientes"
-          value={stats?.clientes ?? '—'}
-          icon={Users}
-          color="text-green-600"
-          bg="bg-green-50"
-        />
-        <StatCard
-          label="Ventas totales"
-          value={stats ? formatCRC(stats.ventas) : '—'}
-          icon={TrendingUp}
-          color="text-brand-600"
-          bg="bg-brand-50"
-        />
-        <StatCard
-          label="Sin stock"
-          value={stats?.sinStock ?? '—'}
-          icon={AlertTriangle}
-          color="text-amber-600"
-          bg="bg-amber-50"
-        />
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <ShoppingCart className="w-5 h-5 text-gray-400" />
-          <h2 className="font-semibold text-gray-800">Actividad reciente</h2>
+      {/* Header + period filter */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">{activeTienda?.nombre ?? 'CalzaTrack'}</p>
         </div>
-        <p className="text-sm text-gray-500">
-          Las últimas ventas y movimientos aparecerán aquí.
-        </p>
+        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl">
+          {(['hoy', 'mes', 'año'] as Periodo[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriodo(p)}
+              className={cn(
+                'px-4 py-1.5 text-sm font-medium rounded-lg transition-all capitalize',
+                periodo === p
+                  ? 'bg-white text-brand-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              )}
+            >
+              {p === 'hoy' ? 'Hoy' : p === 'mes' ? 'Mes' : 'Año'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard
+          label={`Ventas — ${periodoLabel}`}
+          value={loadingVentas ? '…' : formatCRC(totalVentas)}
+          icon={TrendingUp}
+          iconColor="text-brand-600"
+          iconBg="bg-brand-50"
+        />
+        <KpiCard
+          label={`Pares vendidos — ${periodoLabel}`}
+          value={loadingVentas ? '…' : paresVendidos}
+          sub={paresVendidos === 1 ? '1 par' : `${paresVendidos} pares`}
+          icon={ShoppingBag}
+          iconColor="text-blue-600"
+          iconBg="bg-blue-50"
+        />
+        <KpiCard
+          label="Apartados activos"
+          value={loadingApartados ? '…' : apartados.length}
+          sub={apartados.length === 1 ? '1 apartado pendiente' : `${apartados.length} apartados pendientes`}
+          icon={Tag}
+          iconColor="text-orange-600"
+          iconBg="bg-orange-50"
+        />
+        <KpiCard
+          label="Stock total"
+          value={loadingInventario ? '…' : totalPares}
+          sub={`${totalPares.toLocaleString('es-CR')} pares en bodega`}
+          icon={Package}
+          iconColor="text-green-600"
+          iconBg="bg-green-50"
+        />
+      </div>
+
+      {/* Second row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* Apartados en alerta */}
+        <div className="bg-white rounded-xl border border-gray-100 p-5">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Apartados en alerta</p>
+              <p className="text-xs text-gray-400">Límite de 60 días por apartado</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-red-600">{vencidos.length}</p>
+              <p className="text-xs text-red-500 font-medium mt-0.5">Vencidos</p>
+            </div>
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-amber-600">{proximos.length}</p>
+              <p className="text-xs text-amber-600 font-medium mt-0.5">Próximos a vencer</p>
+            </div>
+          </div>
+
+          {alertas.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-3">Todos los apartados están al día</p>
+          ) : (
+            <div className="space-y-1.5">
+              {alertas.slice(0, 4).map((a) => {
+                const dias  = differenceInDays(addDays(new Date(a.created_at), 60), now)
+                const nombre = a.contacto_nombre
+                  ? `${a.contacto_apellido ?? ''} ${a.contacto_nombre}`.trim()
+                  : a.cliente
+                  ? `${a.cliente.apellido ?? ''} ${a.cliente.nombre}`.trim()
+                  : 'Sin contacto'
+                return (
+                  <div key={a.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50 text-sm">
+                    <span className="text-gray-700 truncate">{nombre}</span>
+                    <span className={cn(
+                      'text-xs font-semibold ml-3 shrink-0',
+                      a.tipo === 'vencido' ? 'text-red-600' : 'text-amber-600'
+                    )}>
+                      {a.tipo === 'vencido'
+                        ? `Venció hace ${Math.abs(dias)}d`
+                        : dias === 0 ? 'Vence hoy' : `${dias}d restantes`}
+                    </span>
+                  </div>
+                )
+              })}
+              {alertas.length > 4 && (
+                <p className="text-xs text-gray-400 text-center pt-1">
+                  +{alertas.length - 4} más en Apartados
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Valor del inventario */}
+        <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-col">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center shrink-0">
+              <Wallet className="w-4 h-4 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Valor del inventario</p>
+              <p className="text-xs text-gray-400">Al precio de venta actual</p>
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-gray-900 mt-1">
+            {loadingInventario ? '…' : formatCRC(valorInventario)}
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            {totalPares.toLocaleString('es-CR')} pares · {activeTienda?.nombre ?? 'la tienda'}
+          </p>
+        </div>
+
       </div>
     </div>
   )
