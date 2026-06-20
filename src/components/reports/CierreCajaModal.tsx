@@ -17,6 +17,11 @@ interface Props {
   onClose: () => void
 }
 
+interface EmpleadoTotal {
+  nombre: string
+  total: number
+}
+
 interface Preview {
   efectivo: number
   tarjeta: number
@@ -30,6 +35,7 @@ interface Preview {
   pares_vendidos: number
   apartados_abiertos: number
   creditos_abiertos: number
+  por_empleado: EmpleadoTotal[]
 }
 
 export function CierreCajaModal({ isOpen, onClose }: Props) {
@@ -54,19 +60,18 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
     setLoading(true)
     setPreview(null)
     try {
-      // 1. All ventas for this tienda — needed to map venta_id → tipo
+      // 1. All ventas for this tienda — map venta_id → tipo + empleado_id
       const { data: ventasRaw, error: eVentas } = await supabase
         .from('ventas')
-        .select('id, tipo, estado')
+        .select('id, tipo, estado, empleado_id')
         .eq('tienda_id', activeTienda.id)
       if (eVentas) throw eVentas
 
-      const tiendaVentaIds = (ventasRaw ?? []).map((v) => v.id)
-      const ventaTipoMap = Object.fromEntries(
-        (ventasRaw ?? []).map((v) => [v.id, v.tipo as VentaTipo])
-      )
+      const tiendaVentaIds  = (ventasRaw ?? []).map((v) => v.id)
+      const ventaTipoMap    = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.tipo as VentaTipo]))
+      const ventaEmpleadoMap = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.empleado_id as string | null]))
 
-      // 2. Pagos received today that belong to this tienda's ventas
+      // 2. Pagos received today for this tienda's ventas
       const { data: pagosRaw, error: ePagos } = await supabase
         .from('pagos_venta')
         .select('monto, tipo_pago, venta_id')
@@ -77,30 +82,45 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
 
       const pagos = (pagosRaw ?? []) as { monto: number; tipo_pago: MetodoPago; venta_id: string }[]
 
-      // 3. Pares: items from contado ventas paid today
-      const contadoPagadas = (ventasRaw ?? [])
+      // 3. Pares: contado ventas paid today
+      const contadoPagadasHoy = (ventasRaw ?? [])
         .filter((v) => v.tipo === 'contado' && v.estado === 'pagada')
         .map((v) => v.id)
-
       const pagadosHoyIds = new Set(pagos.map((p) => p.venta_id))
 
       const { data: itemsRaw, error: eItems } = await supabase
         .from('detalle_ventas')
         .select('cantidad, venta_id')
-        .in('venta_id', contadoPagadas.length ? contadoPagadas : [''])
+        .in('venta_id', contadoPagadasHoy.length ? contadoPagadasHoy : [''])
       if (eItems) throw eItems
 
       const pares = (itemsRaw ?? [])
         .filter((i) => pagadosHoyIds.has(i.venta_id))
         .reduce((s, i) => s + i.cantidad, 0)
 
-      // 4. Snapshot of open positions right now
+      // 4. Open positions snapshot
       const [{ count: aptCount }, { count: credCount }] = await Promise.all([
         supabase.from('ventas').select('id', { count: 'exact', head: true })
           .eq('tienda_id', activeTienda.id).eq('tipo', 'apartado').eq('estado', 'pendiente'),
         supabase.from('ventas').select('id', { count: 'exact', head: true })
           .eq('tienda_id', activeTienda.id).eq('tipo', 'credito').eq('estado', 'pendiente'),
       ])
+
+      // 5. Employee names for those who appear in today's pagos
+      const empleadoIds = [...new Set(
+        pagos.map((p) => ventaEmpleadoMap[p.venta_id]).filter(Boolean)
+      )] as string[]
+
+      const empleadoNombreMap: Record<string, string> = {}
+      if (empleadoIds.length) {
+        const { data: emps } = await supabase
+          .from('empleados')
+          .select('id, nombre, apellido')
+          .in('id', empleadoIds)
+        for (const e of emps ?? []) {
+          empleadoNombreMap[e.id] = `${e.nombre}${e.apellido ? ' ' + e.apellido : ''}`
+        }
+      }
 
       // Aggregate
       const result: Preview = {
@@ -109,7 +129,10 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         pares_vendidos: pares,
         apartados_abiertos: aptCount ?? 0,
         creditos_abiertos:  credCount ?? 0,
+        por_empleado: [],
       }
+
+      const empleadoTotals: Record<string, number> = {}
 
       for (const pago of pagos) {
         const m = pago.tipo_pago
@@ -119,7 +142,16 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         if (t === 'apartado') result.total_apartados += pago.monto
         if (t === 'credito')  result.total_creditos  += pago.monto
         result.total_dia += pago.monto
+
+        const empId = ventaEmpleadoMap[pago.venta_id]
+        if (empId) {
+          empleadoTotals[empId] = (empleadoTotals[empId] ?? 0) + pago.monto
+        }
       }
+
+      result.por_empleado = Object.entries(empleadoTotals)
+        .map(([id, total]) => ({ nombre: empleadoNombreMap[id] ?? 'Sin asignar', total }))
+        .sort((a, b) => b.total - a.total)
 
       setPreview(result)
     } catch {
@@ -132,7 +164,8 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!preview || !activeTienda || !user) throw new Error('Datos incompletos')
-      const { error } = await supabase.from('cierres_caja').insert({
+      // Upsert: if a cierre already exists for today, replace it with the latest calculation
+      const { error } = await supabase.from('cierres_caja').upsert({
         tienda_id:          activeTienda.id,
         fecha:              today,
         efectivo:           preview.efectivo,
@@ -149,18 +182,15 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         creditos_abiertos:  preview.creditos_abiertos,
         notas:              notas.trim() || null,
         cerrado_por:        user.id,
-      })
-      if (error) {
-        if (error.code === '23505') throw new Error('Ya hay un cierre registrado para hoy')
-        throw error
-      }
+      }, { onConflict: 'tienda_id,fecha' })
+      if (error) throw error
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cierres'] })
       toast.success('Cierre de caja guardado')
       handleClose()
     },
-    onError: (e: Error) => toast.error(e.message || 'Error al guardar el cierre'),
+    onError: () => toast.error('Error al guardar el cierre'),
   })
 
   function handleClose() {
@@ -176,13 +206,12 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
     <Modal isOpen={isOpen} onClose={handleClose} title="Cierre de caja">
       <div className="space-y-4 px-6 py-4">
 
-        {/* Date badge — read-only, always today */}
+        {/* Date badge */}
         <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5">
           <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Fecha</p>
           <p className="text-sm font-semibold text-gray-800 capitalize mt-0.5">{fechaLabel}</p>
         </div>
 
-        {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-400">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -190,7 +219,6 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
           </div>
         )}
 
-        {/* Preview */}
         {preview && !loading && (
           <div className="space-y-4">
 
@@ -238,6 +266,21 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
                 ))}
               </div>
             </div>
+
+            {/* By employee */}
+            {preview.por_empleado.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Por empleado</p>
+                <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+                  {preview.por_empleado.map(({ nombre, total }) => (
+                    <div key={nombre} className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
+                      <span className="text-gray-600">{nombre}</span>
+                      <span className="font-semibold text-gray-900">{formatCRC(total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Summary stats */}
             <div className="grid grid-cols-3 gap-2">

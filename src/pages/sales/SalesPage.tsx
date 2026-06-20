@@ -210,13 +210,16 @@ export function SalesPage() {
           <p className="text-sm text-gray-500 mt-1">{activeTienda?.nombre}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setCierreOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-          >
-            <ClipboardCheck className="w-4 h-4" />
-            Cierre de caja
-          </button>
+          {preset === 'hoy' && (
+            <button
+              onClick={() => setCierreOpen(true)}
+              disabled={pagoList.length === 0 && pendingList.length === 0}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              Cierre de caja
+            </button>
+          )}
           <button
             onClick={() => setModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors"

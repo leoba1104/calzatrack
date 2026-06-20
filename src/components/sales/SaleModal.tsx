@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { formatCRC } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
+import { PhoneInput } from '@/components/ui/PhoneInput'
 import type { Cliente, Empleado, VentaTipo, MetodoPago } from '@/types'
 
 const headerSchema = z.object({
@@ -224,7 +225,6 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
       if (tipoActual === 'credito' && clienteEsMoroso) throw new Error('CLIENTE_MOROSO')
       if (tipoActual === 'apartado' && !data.contacto_nombre?.trim())   throw new Error('NO_CONTACTO_NOMBRE')
       if (tipoActual === 'apartado' && !data.contacto_apellido?.trim()) throw new Error('NO_CONTACTO_APELLIDO')
-      if (tipoActual === 'apartado' && !data.contacto_telefono?.trim()) throw new Error('NO_CONTACTO_TELEFONO')
       const abonoInicial = data.abono_inicial ?? 0
       if (tipoActual !== 'contado' && abonoInicial > 0 && !data.metodo_pago) throw new Error('NO_PAGO')
 
@@ -323,7 +323,6 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
       else if (e.message === 'CLIENTE_MOROSO') toast.error('No se puede crear un crédito a un cliente moroso')
       else if (e.message === 'NO_CONTACTO_NOMBRE')   toast.error('Ingrese el nombre del cliente del apartado')
       else if (e.message === 'NO_CONTACTO_APELLIDO') toast.error('Ingrese el apellido del cliente del apartado')
-      else if (e.message === 'NO_CONTACTO_TELEFONO') toast.error('Ingrese el teléfono del cliente del apartado')
       else toast.error('Error al registrar la venta')
     },
   })
@@ -408,12 +407,10 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
                     />
                   </FormField>
                 </div>
-                <FormField label="Teléfono" required>
-                  <input
+                <FormField label="Teléfono">
+                  <PhoneInput
                     {...register('contacto_telefono')}
-                    type="tel"
                     className={inputClass()}
-                    placeholder="Ej: 8888-8888"
                   />
                 </FormField>
                 <p className="text-xs text-purple-600">
