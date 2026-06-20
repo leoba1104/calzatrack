@@ -90,12 +90,23 @@ END;
 $$;
 
 -- ─── pg_cron schedule ─────────────────────────────────────────────────────────
--- Requires the pg_cron extension (available on Supabase Pro+).
--- If pg_cron is not enabled, apply only the function above and skip this block.
--- Enable extension first: Extensions → pg_cron in the Supabase dashboard.
+-- Wrapped in a DO block so the migration applies cleanly even when pg_cron is
+-- not yet enabled. If the schema doesn't exist a NOTICE is raised instead of
+-- an error. To enable pg_cron: Supabase dashboard → Database → Extensions → pg_cron.
+-- After enabling, run the SELECT cron.schedule(...) line manually.
 
-SELECT cron.schedule(
-  'auto-cierre-caja',          -- job name (unique)
-  '0 6 * * *',                 -- 06:00 UTC = 00:00 America/Costa_Rica
-  'SELECT auto_cierre_caja()'
-);
+DO $$
+BEGIN
+  PERFORM cron.schedule(
+    'auto-cierre-caja',
+    '0 6 * * *',
+    'SELECT auto_cierre_caja()'
+  );
+EXCEPTION
+  WHEN undefined_schema OR undefined_function THEN
+    RAISE NOTICE
+      'pg_cron not enabled — function auto_cierre_caja() was created but is not scheduled. '
+      'Enable pg_cron in the Supabase dashboard and then run: '
+      'SELECT cron.schedule(''auto-cierre-caja'', ''0 6 * * *'', ''SELECT auto_cierre_caja()'');';
+END;
+$$;
