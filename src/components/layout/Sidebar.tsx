@@ -15,6 +15,7 @@ import {
   ShoppingCart,
   Tag,
   CreditCard,
+  ClipboardList,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -42,6 +43,7 @@ const navItems: NavItem[] = [
   { to: '/suppliers', label: 'Proveedores', icon: Building2,    allowedRoles: ['admin', 'owner'] },
   { to: '/purchases',     label: 'Compras',     icon: ShoppingCart, allowedRoles: ['admin', 'owner'] },
   { to: '/analytics',  label: 'Analíticas',  icon: BarChart3,    allowedRoles: ['admin', 'owner'] },
+  { to: '/reports',    label: 'Reportes',    icon: ClipboardList },
 ]
 
 export function Sidebar() {

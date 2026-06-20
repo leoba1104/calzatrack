@@ -193,3 +193,26 @@ export interface Compra {
   created_at: string
   updated_at: string
 }
+
+export interface CierreCaja {
+  id: string
+  tienda_id: string
+  tienda?: Tienda
+  fecha: string
+  efectivo: number
+  tarjeta: number
+  sinpe: number
+  transferencia: number
+  otro: number
+  total_contado: number
+  total_apartados: number
+  total_creditos: number
+  total_dia: number
+  pares_vendidos: number
+  apartados_abiertos: number
+  creditos_abiertos: number
+  notas: string | null
+  cerrado_por: string | null
+  cerrado_por_profile?: { nombre: string | null; apellido: string | null }
+  created_at: string
+}
