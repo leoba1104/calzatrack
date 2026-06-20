@@ -199,6 +199,7 @@ export interface CierreCaja {
   tienda_id: string
   tienda?: Tienda
   fecha: string
+  desde: string
   efectivo: number
   tarjeta: number
   sinpe: number
