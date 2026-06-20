@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { TrendingUp, ShoppingBag, Tag, Package, AlertTriangle, Wallet } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { TrendingUp, ShoppingBag, Tag, Package, AlertTriangle, Wallet, StickyNote } from 'lucide-react'
 import {
   startOfDay, endOfDay,
   startOfMonth, endOfMonth,
@@ -45,8 +45,44 @@ function KpiCard({ label, value, sub, icon: Icon, iconColor, iconBg }: KpiCardPr
 }
 
 export function DashboardPage() {
-  const { activeTienda } = useAuth()
+  const { activeTienda, user } = useAuth()
+  const qc = useQueryClient()
   const [periodo, setPeriodo] = useState<Periodo>('mes')
+  const [notaText, setNotaText] = useState<string | null>(null)
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const { data: notaData } = useQuery({
+    queryKey: ['notas-tienda', activeTienda?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('notas_tienda')
+        .select('contenido, updated_at')
+        .eq('tienda_id', activeTienda!.id)
+        .maybeSingle()
+      return data as { contenido: string | null; updated_at: string } | null
+    },
+    enabled: !!activeTienda,
+    onSuccess: (d) => {
+      if (notaText === null) setNotaText(d?.contenido ?? '')
+    },
+  } as Parameters<typeof useQuery>[0])
+
+  const notaMutation = useMutation({
+    mutationFn: async (contenido: string) => {
+      const { error } = await supabase.from('notas_tienda').upsert(
+        { tienda_id: activeTienda!.id, contenido, updated_by: user?.id },
+        { onConflict: 'tienda_id' }
+      )
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notas-tienda', activeTienda?.id] }),
+  })
+
+  function handleNotaChange(value: string) {
+    setNotaText(value)
+    if (saveTimeout.current) clearTimeout(saveTimeout.current)
+    saveTimeout.current = setTimeout(() => notaMutation.mutate(value), 1000)
+  }
 
   const range = periodoRange(periodo)
 
@@ -271,6 +307,37 @@ export function DashboardPage() {
         </div>
 
       </div>
+
+      {/* Dashboard notes */}
+      <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-yellow-50 rounded-lg flex items-center justify-center shrink-0">
+              <StickyNote className="w-4 h-4 text-yellow-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Notas</p>
+              <p className="text-xs text-gray-400">Visible para todos en la tienda</p>
+            </div>
+          </div>
+          {notaMutation.isPending && (
+            <span className="text-xs text-gray-400">Guardando...</span>
+          )}
+          {!notaMutation.isPending && notaData?.updated_at && (
+            <span className="text-xs text-gray-300">
+              Guardado {new Date(notaData.updated_at).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+        <textarea
+          value={notaText ?? ''}
+          onChange={(e) => handleNotaChange(e.target.value)}
+          placeholder="Recordatorios, pendientes, mensajes para el equipo..."
+          rows={4}
+          className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-gray-200 bg-white outline-none resize-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 placeholder:text-gray-400 transition-all"
+        />
+      </div>
+
     </div>
   )
 }
