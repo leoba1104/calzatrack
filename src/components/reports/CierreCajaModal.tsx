@@ -194,7 +194,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
       toast.success('Cierre de caja guardado')
       handleClose()
     },
-    onError: () => toast.error('Error al guardar el cierre'),
+    onError: (e: Error) => toast.error(e.message || 'Error al guardar el cierre'),
   })
 
   function handleClose() {
