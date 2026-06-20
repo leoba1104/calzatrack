@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Search, CalendarDays, Banknote, CreditCard, Smartphone, ArrowLeftRight, Eye, ClipboardCheck } from 'lucide-react'
 import {
+  format,
   startOfDay, endOfDay,
   startOfWeek, endOfWeek,
   startOfMonth, endOfMonth,
@@ -105,12 +106,35 @@ export function SalesPage() {
   const [detailVentaId, setDetailVentaId] = useState<string | null>(null)
   const [cierreOpen, setCierreOpen]       = useState(false)
 
+  const today = format(new Date(), 'yyyy-MM-dd')
+
   const dateRange = preset === 'custom'
     ? (customFrom || customTo ? {
         from: customFrom ? new Date(customFrom + 'T00:00:00').toISOString() : '',
         to:   customTo   ? new Date(customTo   + 'T23:59:59').toISOString() : '',
       } : null)
     : presetRange(preset)
+
+  // Last cierre for today — defines the start of the "visible" window when preset='hoy'
+  const { data: ultimoCierre } = useQuery({
+    queryKey: ['cierre-hoy', activeTienda?.id, today],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('cierres_caja')
+        .select('created_at')
+        .eq('tienda_id', activeTienda!.id)
+        .eq('fecha', today)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      return data as { created_at: string } | null
+    },
+    enabled: !!activeTienda && preset === 'hoy',
+    staleTime: 0,
+  })
+
+  // When viewing today and a cierre was done, only show pagos that came in after it
+  const cierreDesde = preset === 'hoy' ? ultimoCierre?.created_at : undefined
 
   const { data: empleados } = useQuery({
     queryKey: ['empleados-list', activeTienda?.id],
@@ -128,7 +152,7 @@ export function SalesPage() {
 
   // Primary query: one row per payment (date-filtered)
   const { data: pagos, isLoading: pagosLoading } = useQuery({
-    queryKey: ['ventas', activeTienda?.id, 'pagos', search, dateRange, empleadoId],
+    queryKey: ['ventas', activeTienda?.id, 'pagos', search, dateRange, empleadoId, cierreDesde],
     queryFn: async () => {
       let q = supabase
         .from('pagos_venta')
@@ -144,8 +168,14 @@ export function SalesPage() {
         .order('fecha', { ascending: false })
         .limit(1000)
 
-      if (dateRange?.from) q = q.gte('fecha', dateRange.from)
-      if (dateRange?.to)   q = q.lte('fecha', dateRange.to)
+      if (cierreDesde) {
+        // Post-cierre view: strictly after the last cierre timestamp
+        q = q.gt('fecha', cierreDesde)
+        if (dateRange?.to) q = q.lte('fecha', dateRange.to)
+      } else {
+        if (dateRange?.from) q = q.gte('fecha', dateRange.from)
+        if (dateRange?.to)   q = q.lte('fecha', dateRange.to)
+      }
 
       const { data, error } = await q
       if (error) throw error
@@ -213,7 +243,7 @@ export function SalesPage() {
           {preset === 'hoy' && (
             <button
               onClick={() => setCierreOpen(true)}
-              disabled={pagoList.length === 0 && pendingList.length === 0}
+              disabled={pagoList.length === 0}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ClipboardCheck className="w-4 h-4" />
@@ -287,6 +317,15 @@ export function SalesPage() {
             </div>
           )}
         </div>
+
+        {/* Post-cierre notice */}
+        {cierreDesde && (
+          <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2 text-xs text-amber-700 shrink-0">
+            <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
+            Cierre realizado a las {format(new Date(cierreDesde), 'HH:mm')} — mostrando solo ventas nuevas.
+            {pagoList.length === 0 && ' No hay ventas post-cierre.'}
+          </div>
+        )}
 
         {/* Table */}
         <div className="flex-1 min-h-0 overflow-y-auto">

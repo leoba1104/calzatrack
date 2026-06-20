@@ -23,6 +23,7 @@ interface EmpleadoTotal {
 }
 
 interface Preview {
+  desde: string
   efectivo: number
   tarjeta: number
   sinpe: number
@@ -42,15 +43,13 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
   const { activeTienda, user } = useAuth()
   const qc = useQueryClient()
 
-  const today    = format(new Date(), 'yyyy-MM-dd')
-  const startISO = startOfDay(new Date()).toISOString()
-  const endISO   = endOfDay(new Date()).toISOString()
+  const today  = format(new Date(), 'yyyy-MM-dd')
+  const endISO = endOfDay(new Date()).toISOString()
 
   const [notas, setNotas]     = useState('')
   const [preview, setPreview] = useState<Preview | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Auto-calculate when modal opens
   useEffect(() => {
     if (isOpen && !preview) calcular()
   }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -60,45 +59,57 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
     setLoading(true)
     setPreview(null)
     try {
-      // 1. All ventas for this tienda — map venta_id → tipo + empleado_id
+      // 1. Find the last cierre for today → defines where this period starts
+      const { data: lastCierre } = await supabase
+        .from('cierres_caja')
+        .select('created_at')
+        .eq('tienda_id', activeTienda.id)
+        .eq('fecha', today)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const desde = lastCierre?.created_at ?? startOfDay(new Date()).toISOString()
+
+      // 2. All ventas for this tienda
       const { data: ventasRaw, error: eVentas } = await supabase
         .from('ventas')
         .select('id, tipo, estado, empleado_id')
         .eq('tienda_id', activeTienda.id)
       if (eVentas) throw eVentas
 
-      const tiendaVentaIds  = (ventasRaw ?? []).map((v) => v.id)
-      const ventaTipoMap    = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.tipo as VentaTipo]))
+      const tiendaVentaIds   = (ventasRaw ?? []).map((v) => v.id)
+      const ventaTipoMap     = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.tipo as VentaTipo]))
       const ventaEmpleadoMap = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.empleado_id as string | null]))
 
-      // 2. Pagos received today for this tienda's ventas
+      // 3. Pagos since the last cierre (or start of day if first cierre)
       const { data: pagosRaw, error: ePagos } = await supabase
         .from('pagos_venta')
         .select('monto, tipo_pago, venta_id')
         .in('venta_id', tiendaVentaIds.length ? tiendaVentaIds : [''])
-        .gte('fecha', startISO)
+        .gt('fecha', desde)   // strictly after last cierre
         .lte('fecha', endISO)
       if (ePagos) throw ePagos
 
       const pagos = (pagosRaw ?? []) as { monto: number; tipo_pago: MetodoPago; venta_id: string }[]
 
-      // 3. Pares: contado ventas paid today
-      const contadoPagadasHoy = (ventasRaw ?? [])
+      // 4. Pares: contado ventas paid in this period
+      const contadoPagadas  = (ventasRaw ?? [])
         .filter((v) => v.tipo === 'contado' && v.estado === 'pagada')
         .map((v) => v.id)
-      const pagadosHoyIds = new Set(pagos.map((p) => p.venta_id))
+      const pagadosEnPeriodo = new Set(pagos.map((p) => p.venta_id))
 
       const { data: itemsRaw, error: eItems } = await supabase
         .from('detalle_ventas')
         .select('cantidad, venta_id')
-        .in('venta_id', contadoPagadasHoy.length ? contadoPagadasHoy : [''])
+        .in('venta_id', contadoPagadas.length ? contadoPagadas : [''])
       if (eItems) throw eItems
 
       const pares = (itemsRaw ?? [])
-        .filter((i) => pagadosHoyIds.has(i.venta_id))
+        .filter((i) => pagadosEnPeriodo.has(i.venta_id))
         .reduce((s, i) => s + i.cantidad, 0)
 
-      // 4. Open positions snapshot
+      // 5. Open positions snapshot
       const [{ count: aptCount }, { count: credCount }] = await Promise.all([
         supabase.from('ventas').select('id', { count: 'exact', head: true })
           .eq('tienda_id', activeTienda.id).eq('tipo', 'apartado').eq('estado', 'pendiente'),
@@ -106,7 +117,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
           .eq('tienda_id', activeTienda.id).eq('tipo', 'credito').eq('estado', 'pendiente'),
       ])
 
-      // 5. Employee names for those who appear in today's pagos
+      // 6. Employee names
       const empleadoIds = [...new Set(
         pagos.map((p) => ventaEmpleadoMap[p.venta_id]).filter(Boolean)
       )] as string[]
@@ -114,9 +125,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
       const empleadoNombreMap: Record<string, string> = {}
       if (empleadoIds.length) {
         const { data: emps } = await supabase
-          .from('empleados')
-          .select('id, nombre, apellido')
-          .in('id', empleadoIds)
+          .from('empleados').select('id, nombre, apellido').in('id', empleadoIds)
         for (const e of emps ?? []) {
           empleadoNombreMap[e.id] = `${e.nombre}${e.apellido ? ' ' + e.apellido : ''}`
         }
@@ -124,6 +133,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
 
       // Aggregate
       const result: Preview = {
+        desde,
         efectivo: 0, tarjeta: 0, sinpe: 0, transferencia: 0, otro: 0,
         total_contado: 0, total_apartados: 0, total_creditos: 0, total_dia: 0,
         pares_vendidos: pares,
@@ -136,11 +146,12 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
 
       for (const pago of pagos) {
         const m = pago.tipo_pago
-        if (m === 'efectivo')      result.efectivo      += pago.monto
+        if (m === 'efectivo')           result.efectivo      += pago.monto
         else if (m === 'tarjeta')       result.tarjeta       += pago.monto
         else if (m === 'sinpe')         result.sinpe         += pago.monto
         else if (m === 'transferencia') result.transferencia += pago.monto
         else                            result.otro          += pago.monto
+
         const t = ventaTipoMap[pago.venta_id]
         if (t === 'contado')  result.total_contado   += pago.monto
         if (t === 'apartado') result.total_apartados += pago.monto
@@ -148,9 +159,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         result.total_dia += pago.monto
 
         const empId = ventaEmpleadoMap[pago.venta_id]
-        if (empId) {
-          empleadoTotals[empId] = (empleadoTotals[empId] ?? 0) + pago.monto
-        }
+        if (empId) empleadoTotals[empId] = (empleadoTotals[empId] ?? 0) + pago.monto
       }
 
       result.por_empleado = Object.entries(empleadoTotals)
@@ -168,10 +177,10 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!preview || !activeTienda || !user) throw new Error('Datos incompletos')
-      // Upsert: if a cierre already exists for today, replace it with the latest calculation
-      const { error } = await supabase.from('cierres_caja').upsert({
+      const { error } = await supabase.from('cierres_caja').insert({
         tienda_id:          activeTienda.id,
         fecha:              today,
+        desde:              preview.desde,
         efectivo:           preview.efectivo,
         tarjeta:            preview.tarjeta,
         sinpe:              preview.sinpe,
@@ -186,11 +195,12 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         creditos_abiertos:  preview.creditos_abiertos,
         notas:              notas.trim() || null,
         cerrado_por:        user.id,
-      }, { onConflict: 'tienda_id,fecha' })
+      })
       if (error) throw error
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cierres'] })
+      qc.invalidateQueries({ queryKey: ['cierre-hoy'] })
       toast.success('Cierre de caja guardado')
       handleClose()
     },
@@ -205,15 +215,24 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
   }
 
   const fechaLabel = format(new Date(), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
+  const desdeLabel = preview
+    ? format(new Date(preview.desde), "HH:mm", { locale: es })
+    : null
+  const esPrimerCierre = preview && preview.desde === startOfDay(new Date()).toISOString()
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Cierre de caja">
       <div className="space-y-4 px-6 py-4">
 
-        {/* Date badge */}
+        {/* Date + period badge */}
         <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5">
           <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Fecha</p>
           <p className="text-sm font-semibold text-gray-800 capitalize mt-0.5">{fechaLabel}</p>
+          {desdeLabel && !esPrimerCierre && (
+            <p className="text-xs text-amber-600 mt-1">
+              Solo ventas desde las {desdeLabel} (post cierre anterior)
+            </p>
+          )}
         </div>
 
         {loading && (
@@ -228,7 +247,9 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
 
             {/* Total highlight */}
             <div className="bg-brand-50 border border-brand-100 rounded-xl p-4 text-center">
-              <p className="text-xs text-brand-600 font-medium uppercase tracking-wide mb-1">Total del día</p>
+              <p className="text-xs text-brand-600 font-medium uppercase tracking-wide mb-1">
+                {esPrimerCierre ? 'Total del día' : 'Total post-cierre'}
+              </p>
               <p className="text-3xl font-bold text-brand-700">{formatCRC(preview.total_dia)}</p>
             </div>
 
@@ -250,7 +271,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
                 ))}
               </div>
               {preview.total_dia === 0 && (
-                <p className="text-sm text-gray-400 text-center py-2">Sin pagos registrados hoy</p>
+                <p className="text-sm text-gray-400 text-center py-2">Sin pagos en este período</p>
               )}
             </div>
 
