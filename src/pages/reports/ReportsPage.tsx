@@ -70,22 +70,50 @@ function CierreDetailModal({ cierre, onClose }: { cierre: CierreCaja; onClose: (
           </div>
         </div>
 
-        {/* By sale type */}
-        <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Por tipo de venta</p>
-          <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
-            {([
-              ['Contado',   cierre.total_contado],
-              ['Apartados', cierre.total_apartados],
-              ['Créditos',  cierre.total_creditos],
-            ] as [string, number][]).map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
-                <span className="text-gray-600">{label}</span>
-                <span className="font-semibold text-gray-900">{formatCRC(value)}</span>
-              </div>
-            ))}
+        {/* Contado breakdown by category */}
+        {cierre.total_contado > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              Ventas normales — {formatCRC(cierre.total_contado)}
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                ['Hombre',  cierre.total_hombre,  'bg-blue-50 text-blue-800'],
+                ['Mujer',   cierre.total_mujer,   'bg-pink-50 text-pink-800'],
+                ['Niño',    cierre.total_nino,    'bg-yellow-50 text-yellow-800'],
+                ['Fajas',   cierre.total_fajas,   'bg-purple-50 text-purple-800'],
+                ['Bolsos',  cierre.total_bolsos,  'bg-teal-50 text-teal-800'],
+                ['Ofertas', cierre.total_ofertas, 'bg-red-50 text-red-800'],
+              ] as [string, number, string][]).filter(([, v]) => v > 0).map(([label, value, cls]) => (
+                <div key={label} className={`rounded-xl p-3 ${cls}`}>
+                  <p className="text-xs font-medium opacity-70">{label}</p>
+                  <p className="text-sm font-bold mt-0.5">{formatCRC(value)}</p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Apartados + Créditos */}
+        {(cierre.total_apartados > 0 || cierre.total_creditos > 0) && (
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Abonos recibidos</p>
+            <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+              {cierre.total_apartados > 0 && (
+                <div className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
+                  <span className="text-gray-600">Apartados</span>
+                  <span className="font-semibold text-gray-900">{formatCRC(cierre.total_apartados)}</span>
+                </div>
+              )}
+              {cierre.total_creditos > 0 && (
+                <div className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
+                  <span className="text-gray-600">Créditos</span>
+                  <span className="font-semibold text-gray-900">{formatCRC(cierre.total_creditos)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-2">

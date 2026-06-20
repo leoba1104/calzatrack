@@ -11,12 +11,22 @@ import { formatCRC } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
 import { PhoneInput } from '@/components/ui/PhoneInput'
-import type { Cliente, Empleado, VentaTipo, MetodoPago } from '@/types'
+import type { Cliente, Empleado, VentaTipo, MetodoPago, VentaCategoriaContado } from '@/types'
+
+const CATEGORIAS_CONTADO: { value: VentaCategoriaContado; label: string }[] = [
+  { value: 'hombre',  label: 'Hombre' },
+  { value: 'mujer',   label: 'Mujer' },
+  { value: 'nino',    label: 'Niño' },
+  { value: 'fajas',   label: 'Fajas' },
+  { value: 'bolsos',  label: 'Bolsos' },
+  { value: 'ofertas', label: 'Ofertas' },
+]
 
 const headerSchema = z.object({
   cliente_id:        z.string().optional(),
   empleado_id:       z.string().optional(),
   tipo:              z.enum(['contado', 'apartado', 'credito']).default('contado'),
+  categoria_venta:   z.string().optional(),
   // z.enum rechaza "" (cadena vacía del <select>); validamos el valor real en la mutación
   metodo_pago:       z.string().optional(),
   descuento:         z.number().min(0).default(0),
@@ -220,6 +230,7 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
   const mutation = useMutation({
     mutationFn: async (data: HeaderData) => {
       if (items.length === 0) throw new Error('NO_ITEMS')
+      if (tipoActual === 'contado' && !data.categoria_venta) throw new Error('NO_CATEGORIA')
       if (tipoActual === 'contado' && !data.metodo_pago) throw new Error('NO_PAGO')
       if (tipoActual === 'credito' && !data.cliente_id) throw new Error('NO_CLIENTE_CREDITO')
       if (tipoActual === 'credito' && clienteEsMoroso) throw new Error('CLIENTE_MOROSO')
@@ -251,6 +262,7 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
           descuento,
           total,
           tipo:              data.tipo,
+          categoria_venta:   data.tipo === 'contado' ? (data.categoria_venta || null) : null,
           estado:            'pendiente',
           notas:             data.notas || null,
           contacto_nombre:   data.contacto_nombre?.trim() || null,
@@ -317,8 +329,9 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
       handleClose()
     },
     onError: (e: Error) => {
-      if (e.message === 'NO_ITEMS') toast.error('Agregue al menos un producto')
-      else if (e.message === 'NO_PAGO') toast.error('Seleccione el método de pago')
+      if (e.message === 'NO_ITEMS')          toast.error('Agregue al menos un producto')
+      else if (e.message === 'NO_CATEGORIA') toast.error('Seleccione la categoría de la venta')
+      else if (e.message === 'NO_PAGO')      toast.error('Seleccione el método de pago')
       else if (e.message === 'NO_CLIENTE_CREDITO') toast.error('El crédito debe asignarse a un cliente registrado')
       else if (e.message === 'CLIENTE_MOROSO') toast.error('No se puede crear un crédito a un cliente moroso')
       else if (e.message === 'NO_CONTACTO_NOMBRE')   toast.error('Ingrese el nombre del cliente del apartado')
@@ -372,6 +385,30 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
                 {selectedClienteId && !clienteEsMoroso && <option value="credito">Crédito</option>}
               </select>
             </FormField>
+
+            {tipoActual === 'contado' && (
+              <FormField label="Categoría" required>
+                <div className="grid grid-cols-3 gap-2">
+                  {CATEGORIAS_CONTADO.map(({ value, label }) => {
+                    const selected = watch('categoria_venta') === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setValue('categoria_venta', value)}
+                        className={`py-2 text-sm font-medium rounded-xl border transition-colors ${
+                          selected
+                            ? 'bg-brand-600 text-white border-brand-600'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400 hover:text-brand-600'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </FormField>
+            )}
 
             {tipoActual === 'contado' && (
               <FormField label="Método de pago" required error={errors.metodo_pago?.message}>

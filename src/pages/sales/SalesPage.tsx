@@ -15,7 +15,7 @@ import { SaleModal } from '@/components/sales/SaleModal'
 import { SaleDetailModal } from '@/components/sales/SaleDetailModal'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { CierreCajaModal } from '@/components/reports/CierreCajaModal'
-import type { VentaTipo, VentaEstado } from '@/types'
+import type { VentaTipo, VentaEstado, VentaCategoriaContado } from '@/types'
 
 type Preset = 'hoy' | 'semana' | 'mes' | 'año' | 'custom'
 
@@ -28,6 +28,15 @@ function presetRange(p: Preset): { from: string; to: string } | null {
   if (p === 'mes')    return { from: startOfMonth(now).toISOString(),                         to: endOfMonth(now).toISOString() }
   if (p === 'año')    return { from: startOfYear(now).toISOString(),                          to: endOfYear(now).toISOString() }
   return null
+}
+
+const categoriaConfig: Record<VentaCategoriaContado, { label: string; className: string }> = {
+  hombre:  { label: 'Hombre',  className: 'bg-blue-100 text-blue-700' },
+  mujer:   { label: 'Mujer',   className: 'bg-pink-100 text-pink-700' },
+  nino:    { label: 'Niño',    className: 'bg-yellow-100 text-yellow-700' },
+  fajas:   { label: 'Fajas',   className: 'bg-purple-100 text-purple-700' },
+  bolsos:  { label: 'Bolsos',  className: 'bg-teal-100 text-teal-700' },
+  ofertas: { label: 'Ofertas', className: 'bg-red-100 text-red-700' },
 }
 
 const tipoConfig: Record<VentaTipo, { label: string; className: string }> = {
@@ -69,6 +78,7 @@ type RawPago = {
     id: string
     numero_venta: string
     tipo: VentaTipo
+    categoria_venta: VentaCategoriaContado | null
     estado: VentaEstado
     total: number
     tienda_id: string
@@ -159,7 +169,7 @@ export function SalesPage() {
         .select(`
           id, monto, tipo_pago, fecha, notas,
           venta:ventas!inner(
-            id, numero_venta, tipo, estado, total, tienda_id, empleado_id,
+            id, numero_venta, tipo, categoria_venta, estado, total, tienda_id, empleado_id,
             cliente:clientes(nombre, apellido),
             empleado:empleados(nombre, apellido)
           )
@@ -386,9 +396,21 @@ export function SalesPage() {
                           <MetodoChip tipoPago={p.tipo_pago} />
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', config.className)}>
-                            {config.label}
-                          </span>
+                          {venta.tipo === 'contado' && venta.categoria_venta
+                            ? (() => {
+                                const cat = categoriaConfig[venta.categoria_venta]
+                                return (
+                                  <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', cat.className)}>
+                                    {cat.label}
+                                  </span>
+                                )
+                              })()
+                            : (
+                              <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', config.className)}>
+                                {config.label}
+                              </span>
+                            )
+                          }
                         </td>
                         <td className="px-4 py-3">
                           <button

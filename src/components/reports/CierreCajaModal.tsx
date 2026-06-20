@@ -10,7 +10,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Textarea } from '@/components/ui/Textarea'
 import { FormField } from '@/components/ui/FormField'
 import { formatCRC } from '@/lib/utils'
-import type { MetodoPago, VentaTipo } from '@/types'
+import type { MetodoPago, VentaTipo, VentaCategoriaContado } from '@/types'
 
 interface Props {
   isOpen: boolean
@@ -33,11 +33,26 @@ interface Preview {
   total_apartados: number
   total_creditos: number
   total_dia: number
+  total_hombre: number
+  total_mujer: number
+  total_nino: number
+  total_fajas: number
+  total_bolsos: number
+  total_ofertas: number
   pares_vendidos: number
   apartados_abiertos: number
   creditos_abiertos: number
   por_empleado: EmpleadoTotal[]
 }
+
+const CATEGORIAS: { key: VentaCategoriaContado; label: string; color: string }[] = [
+  { key: 'hombre',  label: 'Hombre',  color: 'bg-blue-50 text-blue-800' },
+  { key: 'mujer',   label: 'Mujer',   color: 'bg-pink-50 text-pink-800' },
+  { key: 'nino',    label: 'Niño',    color: 'bg-yellow-50 text-yellow-800' },
+  { key: 'fajas',   label: 'Fajas',   color: 'bg-purple-50 text-purple-800' },
+  { key: 'bolsos',  label: 'Bolsos',  color: 'bg-teal-50 text-teal-800' },
+  { key: 'ofertas', label: 'Ofertas', color: 'bg-red-50 text-red-800' },
+]
 
 export function CierreCajaModal({ isOpen, onClose }: Props) {
   const { activeTienda, user } = useAuth()
@@ -71,32 +86,31 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
 
       const desde = lastCierre?.created_at ?? startOfDay(new Date()).toISOString()
 
-      // 2. All ventas for this tienda
+      // 2. All ventas for this tienda (include categoria_venta)
       const { data: ventasRaw, error: eVentas } = await supabase
         .from('ventas')
-        .select('id, tipo, estado, empleado_id')
+        .select('id, tipo, estado, empleado_id, categoria_venta')
         .eq('tienda_id', activeTienda.id)
       if (eVentas) throw eVentas
 
-      const tiendaVentaIds   = (ventasRaw ?? []).map((v) => v.id)
-      const ventaTipoMap     = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.tipo as VentaTipo]))
-      const ventaEmpleadoMap = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.empleado_id as string | null]))
+      const tiendaVentaIds      = (ventasRaw ?? []).map((v) => v.id)
+      const ventaTipoMap        = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.tipo as VentaTipo]))
+      const ventaCategoriaMap   = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.categoria_venta as VentaCategoriaContado | null]))
+      const ventaEmpleadoMap    = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.empleado_id as string | null]))
 
       // 3. Pagos since the last cierre (or start of day if first cierre)
       const { data: pagosRaw, error: ePagos } = await supabase
         .from('pagos_venta')
         .select('monto, tipo_pago, venta_id')
         .in('venta_id', tiendaVentaIds.length ? tiendaVentaIds : [''])
-        .gt('fecha', desde)   // strictly after last cierre
+        .gt('fecha', desde)
         .lte('fecha', endISO)
       if (ePagos) throw ePagos
 
       const pagos = (pagosRaw ?? []) as { monto: number; tipo_pago: MetodoPago; venta_id: string }[]
 
       // 4. Pares: contado ventas paid in this period
-      const contadoPagadas  = (ventasRaw ?? [])
-        .filter((v) => v.tipo === 'contado' && v.estado === 'pagada')
-        .map((v) => v.id)
+      const contadoPagadas   = (ventasRaw ?? []).filter((v) => v.tipo === 'contado' && v.estado === 'pagada').map((v) => v.id)
       const pagadosEnPeriodo = new Set(pagos.map((p) => p.venta_id))
 
       const { data: itemsRaw, error: eItems } = await supabase
@@ -118,14 +132,10 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
       ])
 
       // 6. Employee names
-      const empleadoIds = [...new Set(
-        pagos.map((p) => ventaEmpleadoMap[p.venta_id]).filter(Boolean)
-      )] as string[]
-
+      const empleadoIds = [...new Set(pagos.map((p) => ventaEmpleadoMap[p.venta_id]).filter(Boolean))] as string[]
       const empleadoNombreMap: Record<string, string> = {}
       if (empleadoIds.length) {
-        const { data: emps } = await supabase
-          .from('empleados').select('id, nombre, apellido').in('id', empleadoIds)
+        const { data: emps } = await supabase.from('empleados').select('id, nombre, apellido').in('id', empleadoIds)
         for (const e of emps ?? []) {
           empleadoNombreMap[e.id] = `${e.nombre}${e.apellido ? ' ' + e.apellido : ''}`
         }
@@ -136,6 +146,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         desde,
         efectivo: 0, tarjeta: 0, sinpe: 0, transferencia: 0, otro: 0,
         total_contado: 0, total_apartados: 0, total_creditos: 0, total_dia: 0,
+        total_hombre: 0, total_mujer: 0, total_nino: 0, total_fajas: 0, total_bolsos: 0, total_ofertas: 0,
         pares_vendidos: pares,
         apartados_abiertos: aptCount ?? 0,
         creditos_abiertos:  credCount ?? 0,
@@ -152,8 +163,18 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         else if (m === 'transferencia') result.transferencia += pago.monto
         else                            result.otro          += pago.monto
 
-        const t = ventaTipoMap[pago.venta_id]
-        if (t === 'contado')  result.total_contado   += pago.monto
+        const t   = ventaTipoMap[pago.venta_id]
+        const cat = ventaCategoriaMap[pago.venta_id]
+
+        if (t === 'contado') {
+          result.total_contado += pago.monto
+          if (cat === 'hombre')  result.total_hombre  += pago.monto
+          if (cat === 'mujer')   result.total_mujer   += pago.monto
+          if (cat === 'nino')    result.total_nino    += pago.monto
+          if (cat === 'fajas')   result.total_fajas   += pago.monto
+          if (cat === 'bolsos')  result.total_bolsos  += pago.monto
+          if (cat === 'ofertas') result.total_ofertas += pago.monto
+        }
         if (t === 'apartado') result.total_apartados += pago.monto
         if (t === 'credito')  result.total_creditos  += pago.monto
         result.total_dia += pago.monto
@@ -190,6 +211,12 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         total_apartados:    preview.total_apartados,
         total_creditos:     preview.total_creditos,
         total_dia:          preview.total_dia,
+        total_hombre:       preview.total_hombre,
+        total_mujer:        preview.total_mujer,
+        total_nino:         preview.total_nino,
+        total_fajas:        preview.total_fajas,
+        total_bolsos:       preview.total_bolsos,
+        total_ofertas:      preview.total_ofertas,
         pares_vendidos:     preview.pares_vendidos,
         apartados_abiertos: preview.apartados_abiertos,
         creditos_abiertos:  preview.creditos_abiertos,
@@ -215,10 +242,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
   }
 
   const fechaLabel = format(new Date(), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
-  const desdeLabel = preview
-    ? format(new Date(preview.desde), "HH:mm", { locale: es })
-    : null
-  const esPrimerCierre = preview && preview.desde === startOfDay(new Date()).toISOString()
+  const esPrimerCierre = !preview || preview.desde === startOfDay(new Date()).toISOString()
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Cierre de caja">
@@ -228,9 +252,9 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5">
           <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Fecha</p>
           <p className="text-sm font-semibold text-gray-800 capitalize mt-0.5">{fechaLabel}</p>
-          {desdeLabel && !esPrimerCierre && (
+          {preview && !esPrimerCierre && (
             <p className="text-xs text-amber-600 mt-1">
-              Solo ventas desde las {desdeLabel} (post cierre anterior)
+              Solo ventas desde las {format(new Date(preview.desde), 'HH:mm')} (post cierre anterior)
             </p>
           )}
         </div>
@@ -269,28 +293,52 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
                     <p className="text-base font-bold mt-0.5">{formatCRC(value)}</p>
                   </div>
                 ))}
+                {preview.total_dia === 0 && (
+                  <p className="col-span-2 text-sm text-gray-400 text-center py-2">Sin pagos en este período</p>
+                )}
               </div>
-              {preview.total_dia === 0 && (
-                <p className="text-sm text-gray-400 text-center py-2">Sin pagos en este período</p>
-              )}
             </div>
 
-            {/* By sale type */}
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Por tipo de venta</p>
-              <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
-                {([
-                  ['Contado',   preview.total_contado],
-                  ['Apartados', preview.total_apartados],
-                  ['Créditos',  preview.total_creditos],
-                ] as [string, number][]).map(([label, value]) => (
-                  <div key={label} className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
-                    <span className="text-gray-600">{label}</span>
-                    <span className="font-semibold text-gray-900">{formatCRC(value)}</span>
-                  </div>
-                ))}
+            {/* Contado breakdown by category */}
+            {preview.total_contado > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  Ventas normales — {formatCRC(preview.total_contado)}
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {CATEGORIAS.filter((c) => preview[`total_${c.key}` as keyof Preview] as number > 0).map((c) => {
+                    const value = preview[`total_${c.key}` as keyof Preview] as number
+                    return (
+                      <div key={c.key} className={`rounded-xl p-3 ${c.color}`}>
+                        <p className="text-xs font-medium opacity-70">{c.label}</p>
+                        <p className="text-sm font-bold mt-0.5">{formatCRC(value)}</p>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Apartados + Créditos */}
+            {(preview.total_apartados > 0 || preview.total_creditos > 0) && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Abonos recibidos</p>
+                <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+                  {preview.total_apartados > 0 && (
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
+                      <span className="text-gray-600">Apartados</span>
+                      <span className="font-semibold text-gray-900">{formatCRC(preview.total_apartados)}</span>
+                    </div>
+                  )}
+                  {preview.total_creditos > 0 && (
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
+                      <span className="text-gray-600">Créditos</span>
+                      <span className="font-semibold text-gray-900">{formatCRC(preview.total_creditos)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* By employee */}
             {preview.por_empleado.length > 0 && (
@@ -307,7 +355,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
               </div>
             )}
 
-            {/* Summary stats */}
+            {/* Stats */}
             <div className="grid grid-cols-3 gap-2">
               <div className="bg-gray-50 rounded-xl p-3 text-center">
                 <p className="text-xl font-bold text-gray-900">{preview.pares_vendidos}</p>

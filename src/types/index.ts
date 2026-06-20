@@ -1,7 +1,8 @@
 export type UserRole = 'admin' | 'owner' | 'employee'
 
-export type VentaTipo   = 'contado' | 'apartado' | 'credito'
-export type VentaEstado = 'pendiente' | 'pagada' | 'anulada'
+export type VentaTipo             = 'contado' | 'apartado' | 'credito'
+export type VentaEstado           = 'pendiente' | 'pagada' | 'anulada'
+export type VentaCategoriaContado = 'hombre' | 'mujer' | 'nino' | 'fajas' | 'bolsos' | 'ofertas'
 
 export type MetodoPago = 'efectivo' | 'tarjeta' | 'sinpe' | 'transferencia' | 'otro'
 
@@ -135,6 +136,7 @@ export interface Venta {
   empleado_id: string | null
   empleado?: Empleado
   tipo: VentaTipo
+  categoria_venta: VentaCategoriaContado | null
   estado: VentaEstado
   contacto_nombre:   string | null
   contacto_apellido: string | null
@@ -209,6 +211,12 @@ export interface CierreCaja {
   total_apartados: number
   total_creditos: number
   total_dia: number
+  total_hombre: number
+  total_mujer: number
+  total_nino: number
+  total_fajas: number
+  total_bolsos: number
+  total_ofertas: number
   pares_vendidos: number
   apartados_abiertos: number
   creditos_abiertos: number
