@@ -6,12 +6,21 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
-import type { VentaTipo, VentaEstado } from '@/types'
+import type { VentaTipo, VentaEstado, VentaCategoriaContado } from '@/types'
 
 const TIPO_CONFIG: Record<VentaTipo, { label: string; className: string }> = {
   contado:  { label: 'Normal',   className: 'bg-green-100 text-green-700' },
   apartado: { label: 'Apartado', className: 'bg-blue-100 text-blue-700' },
   credito:  { label: 'Crédito',  className: 'bg-orange-100 text-orange-700' },
+}
+
+const CATEGORIA_CONFIG: Record<VentaCategoriaContado, { label: string; className: string }> = {
+  hombre:  { label: 'Hombre',  className: 'bg-blue-100 text-blue-700' },
+  mujer:   { label: 'Mujer',   className: 'bg-pink-100 text-pink-700' },
+  nino:    { label: 'Niño',    className: 'bg-yellow-100 text-yellow-700' },
+  fajas:   { label: 'Fajas',   className: 'bg-purple-100 text-purple-700' },
+  bolsos:  { label: 'Bolsos',  className: 'bg-teal-100 text-teal-700' },
+  ofertas: { label: 'Ofertas', className: 'bg-red-100 text-red-700' },
 }
 const ESTADO_CONFIG: Record<VentaEstado, { label: string; className: string }> = {
   pendiente: { label: 'Pendiente', className: 'bg-yellow-100 text-yellow-700' },
@@ -28,6 +37,7 @@ type VentaDetail = {
   numero_venta: string
   fecha: string
   tipo: VentaTipo
+  categoria_venta: VentaCategoriaContado | null
   estado: VentaEstado
   subtotal: number
   descuento: number
@@ -73,7 +83,7 @@ export function SaleDetailModal({ ventaId, isOpen, onClose }: SaleDetailModalPro
       const { data, error } = await supabase
         .from('ventas')
         .select(`
-          id, numero_venta, fecha, tipo, estado, subtotal, descuento, impuesto, total, notas,
+          id, numero_venta, fecha, tipo, categoria_venta, estado, subtotal, descuento, impuesto, total, notas,
           contacto_nombre, contacto_apellido, contacto_telefono,
           cliente:clientes(nombre, apellido),
           empleado:empleados(nombre, apellido),
@@ -128,9 +138,17 @@ export function SaleDetailModal({ ventaId, isOpen, onClose }: SaleDetailModalPro
           {/* Info header */}
           <div className="p-5 space-y-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium', TIPO_CONFIG[venta.tipo].className)}>
-                {TIPO_CONFIG[venta.tipo].label}
-              </span>
+              {venta.tipo === 'contado' && venta.categoria_venta
+                ? (
+                  <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium', CATEGORIA_CONFIG[venta.categoria_venta].className)}>
+                    {CATEGORIA_CONFIG[venta.categoria_venta].label}
+                  </span>
+                ) : (
+                  <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium', TIPO_CONFIG[venta.tipo].className)}>
+                    {TIPO_CONFIG[venta.tipo].label}
+                  </span>
+                )
+              }
               <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium', ESTADO_CONFIG[venta.estado].className)}>
                 {ESTADO_CONFIG[venta.estado].label}
               </span>
