@@ -136,7 +136,11 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
 
       for (const pago of pagos) {
         const m = pago.tipo_pago
-        result[m as keyof typeof result] = (result[m as keyof typeof result] as number) + pago.monto
+        if (m === 'efectivo')      result.efectivo      += pago.monto
+        else if (m === 'tarjeta')       result.tarjeta       += pago.monto
+        else if (m === 'sinpe')         result.sinpe         += pago.monto
+        else if (m === 'transferencia') result.transferencia += pago.monto
+        else                            result.otro          += pago.monto
         const t = ventaTipoMap[pago.venta_id]
         if (t === 'contado')  result.total_contado   += pago.monto
         if (t === 'apartado') result.total_apartados += pago.monto
