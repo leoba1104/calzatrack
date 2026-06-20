@@ -24,14 +24,14 @@ const metodoPagoLabel: Record<MetodoPago, string> = {
   otro:          'Otro',
 }
 
-interface CreditoDetailModalProps {
+interface CreditDetailModalProps {
   venta: Venta | null
   isOpen: boolean
   onClose: () => void
   onCompleted?: () => void
 }
 
-export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: CreditoDetailModalProps) {
+export function CreditDetailModal({ venta, isOpen, onClose, onCompleted }: CreditDetailModalProps) {
   const qc = useQueryClient()
 
   const [showAbono, setShowAbono]   = useState(false)

@@ -52,13 +52,13 @@ interface DisponibleRow {
   }
 }
 
-interface VentaModalProps {
+interface SaleModalProps {
   isOpen: boolean
   onClose: () => void
   initialTipo?: VentaTipo
 }
 
-export function VentaModal({ isOpen, onClose, initialTipo = 'contado' }: VentaModalProps) {
+export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModalProps) {
   const { activeTienda } = useAuth()
   const qc = useQueryClient()
 

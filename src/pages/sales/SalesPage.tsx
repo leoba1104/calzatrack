@@ -10,8 +10,8 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
-import { VentaModal } from '@/components/ventas/VentaModal'
-import { VentaDetailModal } from '@/components/ventas/VentaDetailModal'
+import { SaleModal } from '@/components/sales/SaleModal'
+import { SaleDetailModal } from '@/components/sales/SaleDetailModal'
 import type { VentaTipo, VentaEstado } from '@/types'
 
 type Preset = 'hoy' | 'semana' | 'mes' | 'año' | 'custom'
@@ -91,7 +91,7 @@ type PendingVenta = {
 
 interface EmpleadoOption { id: string; nombre: string; apellido: string | null }
 
-export function VentasPage() {
+export function SalesPage() {
   const { activeTienda } = useAuth()
 
   const [search, setSearch]         = useState('')
@@ -433,9 +433,9 @@ export function VentasPage() {
         </div>
       </div>
 
-      <VentaModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
+      <SaleModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
 
-      <VentaDetailModal
+      <SaleDetailModal
         ventaId={detailVentaId}
         isOpen={!!detailVentaId}
         onClose={() => setDetailVentaId(null)}

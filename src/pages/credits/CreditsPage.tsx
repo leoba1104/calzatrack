@@ -5,12 +5,12 @@ import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
-import { CreditoDetailModal } from '@/components/creditos/CreditoDetailModal'
+import { CreditDetailModal } from '@/components/credits/CreditDetailModal'
 import type { Venta } from '@/types'
 
 type RichCliente = { nombre: string; apellido: string | null; moroso: boolean }
 
-export function CreditosPage() {
+export function CreditsPage() {
   const { activeTienda, canManage } = useAuth()
   const qc = useQueryClient()
 
@@ -267,7 +267,7 @@ export function CreditosPage() {
         )}
       </div>
 
-      <CreditoDetailModal
+      <CreditDetailModal
         venta={creditos?.find(v => v.id === detailVentaId) ?? null}
         isOpen={!!detailVentaId}
         onClose={() => setDetailVentaId(null)}

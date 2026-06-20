@@ -29,14 +29,14 @@ const metodoPagoLabel: Record<MetodoPago, string> = {
   otro:          'Otro',
 }
 
-interface ApartadoDetailModalProps {
+interface LayawayDetailModalProps {
   venta: Venta | null
   isOpen: boolean
   onClose: () => void
   onCompleted?: () => void
 }
 
-export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: ApartadoDetailModalProps) {
+export function LayawayDetailModal({ venta, isOpen, onClose, onCompleted }: LayawayDetailModalProps) {
   const qc = useQueryClient()
 
   const [showAbono, setShowAbono]           = useState(false)
@@ -83,7 +83,7 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
       if (!montoNum || montoNum <= 0) throw new Error('Monto inválido')
       if (montoNum > saldo + 0.01) throw new Error(`El monto no puede superar el saldo (${formatCRC(saldo)})`)
       // If the user picked today, use the exact current timestamp so the row
-      // sorts at the top of VentasPage (which orders by pagos_venta.fecha DESC).
+      // sorts at the top of SalesPage (which orders by pagos_venta.fecha DESC).
       // For past dates use local noon to avoid UTC-midnight timezone shift.
       const today    = format(new Date(), 'yyyy-MM-dd')
       const fechaISO = fechaAbono === today

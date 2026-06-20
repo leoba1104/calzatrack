@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
-import { ApartadoDetailModal } from '@/components/apartados/ApartadoDetailModal'
+import { LayawayDetailModal } from '@/components/layaways/LayawayDetailModal'
 import type { Venta } from '@/types'
 
 function diasInfo(createdAt: string) {
@@ -15,7 +15,7 @@ function diasInfo(createdAt: string) {
   return { dias, vencido: dias < 0 }
 }
 
-export function ApartadosPage() {
+export function LayawaysPage() {
   const { activeTienda, canManage } = useAuth()
   const qc = useQueryClient()
 
@@ -216,7 +216,7 @@ export function ApartadosPage() {
         )}
       </div>
 
-      <ApartadoDetailModal
+      <LayawayDetailModal
         venta={apartados?.find(v => v.id === detailVentaId) ?? null}
         isOpen={!!detailVentaId}
         onClose={() => setDetailVentaId(null)}

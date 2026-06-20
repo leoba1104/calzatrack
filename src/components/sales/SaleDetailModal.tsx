@@ -54,13 +54,13 @@ type VentaDetail = {
   }[]
 }
 
-interface VentaDetailModalProps {
+interface SaleDetailModalProps {
   ventaId: string | null
   isOpen: boolean
   onClose: () => void
 }
 
-export function VentaDetailModal({ ventaId, isOpen, onClose }: VentaDetailModalProps) {
+export function SaleDetailModal({ ventaId, isOpen, onClose }: SaleDetailModalProps) {
   const { isAdmin } = useAuth()
   const qc = useQueryClient()
   const [confirmAnular, setConfirmAnular] = useState(false)

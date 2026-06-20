@@ -6,13 +6,13 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { InventoryPage } from '@/pages/inventory/InventoryPage'
-import { VentasPage } from '@/pages/ventas/VentasPage'
+import { SalesPage } from '@/pages/sales/SalesPage'
 import { ClientsPage } from '@/pages/clients/ClientsPage'
 import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage'
 import { EmployeesPage } from '@/pages/employees/EmployeesPage'
 import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
-import { ApartadosPage } from '@/pages/apartados/ApartadosPage'
-import { CreditosPage } from '@/pages/creditos/CreditosPage'
+import { LayawaysPage } from '@/pages/layaways/LayawaysPage'
+import { CreditsPage } from '@/pages/credits/CreditsPage'
 import { PurchasesPage } from '@/pages/purchases/PurchasesPage'
 
 const queryClient = new QueryClient({
@@ -75,17 +75,17 @@ export default function App() {
             }
           >
             <Route index element={<DashboardPage />} />
-            <Route path="inventario" element={<InventoryPage />} />
-            <Route path="ventas" element={<VentasPage />} />
-            <Route path="apartados" element={<ApartadosPage />} />
-            <Route path="creditos"  element={<CreditosPage />} />
-            <Route path="clientes" element={<ClientsPage />} />
-            <Route path="empleados" element={<EmployeesPage />} />
-            <Route path="proveedores" element={<SuppliersPage />} />
-            <Route path="compras" element={<PurchasesPage />} />
-            <Route path="analiticas" element={<AnalyticsPage />} />
+            <Route path="inventory" element={<InventoryPage />} />
+            <Route path="sales" element={<SalesPage />} />
+            <Route path="layaways" element={<LayawaysPage />} />
+            <Route path="credits"  element={<CreditsPage />} />
+            <Route path="clients" element={<ClientsPage />} />
+            <Route path="employees" element={<EmployeesPage />} />
+            <Route path="suppliers" element={<SuppliersPage />} />
+            <Route path="purchases" element={<PurchasesPage />} />
+            <Route path="analytics" element={<AnalyticsPage />} />
             {/* Backward compat redirect */}
-            <Route path="facturas" element={<Navigate to="/ventas" replace />} />
+            <Route path="facturas" element={<Navigate to="/sales" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

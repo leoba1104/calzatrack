@@ -33,15 +33,15 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { to: '/',           label: 'Dashboard',  icon: LayoutDashboard, end: true },
-  { to: '/inventario', label: 'Inventario', icon: Package },
-  { to: '/ventas',     label: 'Ventas',     icon: FileText },
-  { to: '/apartados',  label: 'Apartados',  icon: Tag },
-  { to: '/creditos',   label: 'Créditos',   icon: CreditCard },
-  { to: '/clientes',   label: 'Clientes',   icon: Users },
-  { to: '/empleados',   label: 'Empleados',   icon: UserCog,      allowedRoles: ['admin', 'owner'] },
-  { to: '/proveedores', label: 'Proveedores', icon: Building2,    allowedRoles: ['admin', 'owner'] },
-  { to: '/compras',     label: 'Compras',     icon: ShoppingCart, allowedRoles: ['admin', 'owner'] },
-  { to: '/analiticas',  label: 'Analíticas',  icon: BarChart3,    allowedRoles: ['admin', 'owner'] },
+  { to: '/inventory', label: 'Inventario', icon: Package },
+  { to: '/sales',     label: 'Ventas',     icon: FileText },
+  { to: '/layaways',  label: 'Apartados',  icon: Tag },
+  { to: '/credits',   label: 'Créditos',   icon: CreditCard },
+  { to: '/clients',   label: 'Clientes',   icon: Users },
+  { to: '/employees',   label: 'Empleados',   icon: UserCog,      allowedRoles: ['admin', 'owner'] },
+  { to: '/suppliers', label: 'Proveedores', icon: Building2,    allowedRoles: ['admin', 'owner'] },
+  { to: '/purchases',     label: 'Compras',     icon: ShoppingCart, allowedRoles: ['admin', 'owner'] },
+  { to: '/analytics',  label: 'Analíticas',  icon: BarChart3,    allowedRoles: ['admin', 'owner'] },
 ]
 
 export function Sidebar() {
