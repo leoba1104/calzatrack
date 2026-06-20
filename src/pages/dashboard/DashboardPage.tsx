@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { TrendingUp, ShoppingBag, Tag, Package, AlertTriangle, Wallet, StickyNote } from 'lucide-react'
+import { TrendingUp, ShoppingBag, Tag, Package, AlertTriangle, Wallet, StickyNote, Plus, X } from 'lucide-react'
 import {
   startOfDay, endOfDay,
   startOfMonth, endOfMonth,
@@ -48,45 +48,71 @@ export function DashboardPage() {
   const { activeTienda, user } = useAuth()
   const qc = useQueryClient()
   const [periodo, setPeriodo] = useState<Periodo>('mes')
-  const [notaText, setNotaText] = useState<string | null>(null)
-  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [newNota, setNewNota] = useState('')
+  const [addingNota, setAddingNota] = useState(false)
+  const newNotaRef = useRef<HTMLTextAreaElement>(null)
 
-  type NotaData = { contenido: string | null; updated_at: string }
+  const NOTE_COLORS = ['yellow', 'pink', 'blue', 'green', 'purple'] as const
+  type NoteColor = typeof NOTE_COLORS[number]
+  const [newColor, setNewColor] = useState<NoteColor>('yellow')
 
-  const { data: notaData } = useQuery<NotaData | null>({
+  const COLOR_STYLES: Record<NoteColor, string> = {
+    yellow: 'bg-yellow-50 border-yellow-200',
+    pink:   'bg-pink-50   border-pink-200',
+    blue:   'bg-blue-50   border-blue-200',
+    green:  'bg-green-50  border-green-200',
+    purple: 'bg-purple-50 border-purple-200',
+  }
+  const COLOR_DOT: Record<NoteColor, string> = {
+    yellow: 'bg-yellow-400',
+    pink:   'bg-pink-400',
+    blue:   'bg-blue-400',
+    green:  'bg-green-500',
+    purple: 'bg-purple-400',
+  }
+
+  type Nota = { id: string; contenido: string; color: NoteColor; created_at: string }
+
+  const { data: notas = [] } = useQuery<Nota[]>({
     queryKey: ['notas-tienda', activeTienda?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from('notas_tienda')
-        .select('contenido, updated_at')
+        .select('id, contenido, color, created_at')
         .eq('tienda_id', activeTienda!.id)
-        .maybeSingle()
-      return data as NotaData | null
+        .order('created_at', { ascending: false })
+      return (data ?? []) as Nota[]
     },
     enabled: !!activeTienda,
   })
 
-  useEffect(() => {
-    if (notaData !== undefined && notaText === null) {
-      setNotaText(notaData?.contenido ?? '')
-    }
-  }, [notaData]) // eslint-disable-line react-hooks/exhaustive-deps
+  const addMutation = useMutation({
+    mutationFn: async ({ contenido, color }: { contenido: string; color: NoteColor }) => {
+      const { error } = await supabase.from('notas_tienda').insert({
+        tienda_id: activeTienda!.id, contenido, color, created_by: user?.id,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notas-tienda', activeTienda?.id] })
+      setNewNota('')
+      setAddingNota(false)
+      setNewColor('yellow')
+    },
+  })
 
-  const notaMutation = useMutation({
-    mutationFn: async (contenido: string) => {
-      const { error } = await supabase.from('notas_tienda').upsert(
-        { tienda_id: activeTienda!.id, contenido, updated_by: user?.id },
-        { onConflict: 'tienda_id' }
-      )
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('notas_tienda').delete().eq('id', id)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notas-tienda', activeTienda?.id] }),
   })
 
-  function handleNotaChange(value: string) {
-    setNotaText(value)
-    if (saveTimeout.current) clearTimeout(saveTimeout.current)
-    saveTimeout.current = setTimeout(() => notaMutation.mutate(value), 1000)
+  function handleAddNota() {
+    const text = newNota.trim()
+    if (!text) return
+    addMutation.mutate({ contenido: text, color: newColor })
   }
 
   const range = periodoRange(periodo)
@@ -313,34 +339,85 @@ export function DashboardPage() {
 
       </div>
 
-      {/* Dashboard notes */}
+      {/* Sticky notes */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-yellow-50 rounded-lg flex items-center justify-center shrink-0">
               <StickyNote className="w-4 h-4 text-yellow-600" />
             </div>
             <div>
               <p className="text-sm font-semibold text-gray-800">Notas</p>
-              <p className="text-xs text-gray-400">Visible para todos en la tienda</p>
+              <p className="text-xs text-gray-400">Compartidas con el equipo de la tienda</p>
             </div>
           </div>
-          {notaMutation.isPending && (
-            <span className="text-xs text-gray-400">Guardando...</span>
-          )}
-          {!notaMutation.isPending && notaData?.updated_at && (
-            <span className="text-xs text-gray-300">
-              Guardado {new Date(notaData.updated_at).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
+          <button
+            onClick={() => { setAddingNota(true); setTimeout(() => newNotaRef.current?.focus(), 50) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-brand-600 border border-brand-200 rounded-xl hover:bg-brand-50 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Nueva nota
+          </button>
         </div>
-        <textarea
-          value={notaText ?? ''}
-          onChange={(e) => handleNotaChange(e.target.value)}
-          placeholder="Recordatorios, pendientes, mensajes para el equipo..."
-          rows={4}
-          className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-gray-200 bg-white outline-none resize-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 placeholder:text-gray-400 transition-all"
-        />
+
+        {/* Add form */}
+        {addingNota && (
+          <div className={cn('rounded-xl border p-3 mb-3 space-y-2', COLOR_STYLES[newColor])}>
+            <textarea
+              ref={newNotaRef}
+              value={newNota}
+              onChange={(e) => setNewNota(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddNota() }}
+              placeholder="Escribe la nota..."
+              rows={3}
+              className="w-full bg-transparent text-sm outline-none resize-none placeholder:text-gray-400"
+            />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                {NOTE_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setNewColor(c)}
+                    className={cn('w-5 h-5 rounded-full transition-all', COLOR_DOT[c], newColor === c ? 'ring-2 ring-offset-1 ring-gray-400' : '')}
+                  />
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setAddingNota(false); setNewNota('') }} className="text-xs text-gray-400 hover:text-gray-600">
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAddNota}
+                  disabled={!newNota.trim() || addMutation.isPending}
+                  className="px-3 py-1 text-xs font-semibold bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Notes grid */}
+        {notas.length === 0 && !addingNota ? (
+          <p className="text-sm text-gray-400 text-center py-6">
+            Sin notas — agrega recordatorios o mensajes para el equipo
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {notas.map((nota) => (
+              <div key={nota.id} className={cn('relative rounded-xl border p-3 group', COLOR_STYLES[nota.color as NoteColor] ?? COLOR_STYLES.yellow)}>
+                <button
+                  onClick={() => deleteMutation.mutate(nota.id)}
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-white/60 transition-all"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap pr-4 leading-snug">{nota.contenido}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
     </div>
