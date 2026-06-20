@@ -97,16 +97,21 @@ $$;
 
 DO $$
 BEGIN
+  -- Remove existing job first so this block is safe to re-run
+  BEGIN
+    PERFORM cron.unschedule('auto-cierre-caja');
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+
   PERFORM cron.schedule(
     'auto-cierre-caja',
     '0 6 * * *',
     'SELECT auto_cierre_caja()'
   );
-EXCEPTION
-  WHEN undefined_schema OR undefined_function THEN
-    RAISE NOTICE
-      'pg_cron not enabled — function auto_cierre_caja() was created but is not scheduled. '
-      'Enable pg_cron in the Supabase dashboard and then run: '
-      'SELECT cron.schedule(''auto-cierre-caja'', ''0 6 * * *'', ''SELECT auto_cierre_caja()'');';
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE
+    'pg_cron not enabled — auto_cierre_caja() was created but is not scheduled. '
+    'Enable pg_cron in the Supabase dashboard, then run: '
+    'SELECT cron.schedule(''auto-cierre-caja'', ''0 6 * * *'', ''SELECT auto_cierre_caja()'');';
 END;
 $$;
