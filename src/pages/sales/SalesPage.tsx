@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
 import { SaleModal } from '@/components/sales/SaleModal'
 import { SaleDetailModal } from '@/components/sales/SaleDetailModal'
+import { DatePicker } from '@/components/ui/DatePicker'
 import type { VentaTipo, VentaEstado } from '@/types'
 
 type Preset = 'hoy' | 'semana' | 'mes' | 'año' | 'custom'
@@ -266,11 +267,9 @@ export function SalesPage() {
 
           {preset === 'custom' && (
             <div className="flex items-center gap-2 shrink-0">
-              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500" />
+              <DatePicker value={customFrom} onChange={setCustomFrom} placeholder="Desde" className="w-44" />
               <span className="text-gray-400 text-xs">—</span>
-              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500" />
+              <DatePicker value={customTo} onChange={setCustomTo} placeholder="Hasta" className="w-44" />
             </div>
           )}
         </div>

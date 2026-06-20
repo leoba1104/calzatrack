@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
+import { DatePicker } from '@/components/ui/DatePicker'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
 import type { Venta, PagoVenta, DetalleVenta, MetodoPago } from '@/types'
 
@@ -343,7 +344,7 @@ export function LayawayDetailModal({ venta, isOpen, onClose, onCompleted }: Laya
                     </select>
                   </FormField>
                   <FormField label="Fecha">
-                    <input type="date" value={fechaAbono} onChange={(e) => setFechaAbono(e.target.value)} className={inputClass()} />
+                    <DatePicker value={fechaAbono} onChange={setFechaAbono} />
                   </FormField>
                   <FormField label="Notas (opcional)">
                     <input value={notasAbono} onChange={(e) => setNotasAbono(e.target.value)} className={inputClass()} placeholder="Referencia, observación..." />

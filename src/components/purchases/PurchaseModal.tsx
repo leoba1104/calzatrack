@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
+import { DatePicker } from '@/components/ui/DatePicker'
 import { formatCRC } from '@/lib/utils'
 import type { Proveedor } from '@/types'
 
@@ -50,7 +51,7 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<HeaderData>({
+  const { register, handleSubmit, reset, watch, control, formState: { errors } } = useForm<HeaderData>({
     resolver: zodResolver(headerSchema),
     defaultValues: { proveedor_id: '', fecha: new Date().toISOString().slice(0, 10), numero_factura_proveedor: '', estado: 'pendiente', notas: '' },
   })
@@ -195,7 +196,13 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
           </FormField>
 
           <FormField label="Fecha" required error={errors.fecha?.message}>
-            <input {...register('fecha')} type="date" className={inputClass(!!errors.fecha)} />
+            <Controller
+              name="fecha"
+              control={control}
+              render={({ field }) => (
+                <DatePicker value={field.value} onChange={field.onChange} error={!!errors.fecha} />
+              )}
+            />
           </FormField>
 
           <FormField label="N.° factura del proveedor">
