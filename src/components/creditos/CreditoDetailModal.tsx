@@ -78,9 +78,7 @@ export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: Cred
       const montoNum = parseFloat(monto)
       if (!montoNum || montoNum <= 0) throw new Error('Monto inválido')
       if (montoNum > saldo + 0.01) throw new Error(`El monto no puede superar el saldo (${formatCRC(saldo)})`)
-      // If the user picked today, use the exact current timestamp so the row
-      // sorts at the top of VentasPage (which orders by pagos_venta.fecha DESC).
-      // For past dates use local noon to avoid UTC-midnight timezone shift.
+
       const today    = format(new Date(), 'yyyy-MM-dd')
       const fechaISO = fechaAbono === today
         ? new Date().toISOString()
@@ -94,31 +92,33 @@ export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: Cred
         notas:     notasAbono || null,
       })
       if (error) throw error
+
+      // Auto-complete: if this payment covers the remaining balance, mark as paid
+      const nuevoSaldo = saldo - montoNum
+      if (nuevoSaldo <= 0.01) {
+        const { error: eUpdate } = await supabase
+          .from('ventas').update({ estado: 'pagada' }).eq('id', venta!.id)
+        if (eUpdate) throw eUpdate
+        return true
+      }
+      return false
     },
-    onSuccess: () => {
+    onSuccess: (completed) => {
       qc.invalidateQueries({ queryKey: ['pagos-credito', venta?.id] })
       invalidate()
-      toast.success('Abono registrado')
-      setMonto('')
-      setNotasAbono('')
-      setFechaAbono(format(new Date(), 'yyyy-MM-dd'))
-      setShowAbono(false)
+      if (completed) {
+        toast.success('¡Crédito pagado — saldo completado!')
+        onCompleted?.()
+        onClose()
+      } else {
+        toast.success('Abono registrado')
+        setMonto('')
+        setNotasAbono('')
+        setFechaAbono(format(new Date(), 'yyyy-MM-dd'))
+        setShowAbono(false)
+      }
     },
     onError: (e: Error) => toast.error(e.message || 'Error al registrar el abono'),
-  })
-
-  const completarMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('ventas').update({ estado: 'pagada' }).eq('id', venta!.id)
-      if (error) throw error
-    },
-    onSuccess: () => {
-      invalidate()
-      toast.success('¡Crédito completado! — marcado como pagado')
-      onCompleted?.()
-      onClose()
-    },
-    onError: () => toast.error('Error al completar el crédito'),
   })
 
   const archivarMutation = useMutation({
@@ -340,19 +340,6 @@ export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: Cred
           </div>
         )}
 
-        {pagado && (
-          <div className="mt-4 p-4 bg-green-50 border border-green-100 rounded-xl flex items-center justify-between">
-            <p className="text-sm text-green-700 font-medium">¡Saldo completado! Puedes marcar el crédito como pagado.</p>
-            <button
-              onClick={() => completarMutation.mutate()}
-              disabled={completarMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60 shrink-0 ml-4"
-            >
-              {completarMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              {completarMutation.isPending ? 'Completando...' : 'Marcar como pagado'}
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="px-6 py-4 border-t border-gray-100 flex justify-end bg-gray-50/50">

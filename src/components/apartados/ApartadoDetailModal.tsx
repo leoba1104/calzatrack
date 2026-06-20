@@ -98,36 +98,35 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
         notas:     notasAbono || null,
       })
       if (error) throw error
+
+      // Auto-complete: if this payment covers the remaining balance, mark as paid
+      const nuevoSaldo = saldo - montoNum
+      if (nuevoSaldo <= 0.01) {
+        const { error: eUpdate } = await supabase
+          .from('ventas').update({ estado: 'pagada' }).eq('id', venta!.id)
+        if (eUpdate) throw eUpdate
+        return true
+      }
+      return false
     },
-    onSuccess: () => {
+    onSuccess: (completed) => {
       qc.invalidateQueries({ queryKey: ['pagos-apartado', venta?.id] })
       qc.invalidateQueries({ queryKey: ['apartados'] })
       qc.invalidateQueries({ queryKey: ['ventas'] })
       qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
-      toast.success('Abono registrado')
-      setMonto('')
-      setNotasAbono('')
-      setFechaAbono(format(new Date(), 'yyyy-MM-dd'))
-      setShowAbono(false)
+      if (completed) {
+        toast.success('¡Apartado pagado — saldo completado!')
+        onCompleted?.()
+        onClose()
+      } else {
+        toast.success('Abono registrado')
+        setMonto('')
+        setNotasAbono('')
+        setFechaAbono(format(new Date(), 'yyyy-MM-dd'))
+        setShowAbono(false)
+      }
     },
     onError: (e: Error) => toast.error(e.message || 'Error al registrar el abono'),
-  })
-
-  const completarMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('ventas').update({ estado: 'pagada' }).eq('id', venta!.id)
-      if (error) throw error
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pagos-apartado', venta?.id] })
-      qc.invalidateQueries({ queryKey: ['apartados'] })
-      qc.invalidateQueries({ queryKey: ['ventas'] })
-      qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
-      toast.success('¡Apartado completado! — marcado como pagado')
-      onCompleted?.()
-      onClose()
-    },
-    onError: () => toast.error('Error al completar el apartado'),
   })
 
   const cancelarDeudaMutation = useMutation({
@@ -368,20 +367,6 @@ export function ApartadoDetailModal({ venta, isOpen, onClose, onCompleted }: Apa
           </div>
         )}
 
-        {/* Complete button */}
-        {pagado && (
-          <div className="mt-4 p-4 bg-green-50 border border-green-100 rounded-xl flex items-center justify-between">
-            <p className="text-sm text-green-700 font-medium">¡Saldo completado! Puedes marcar el apartado como pagado.</p>
-            <button
-              onClick={() => completarMutation.mutate()}
-              disabled={completarMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-60 transition-colors shrink-0 ml-4"
-            >
-              {completarMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              {completarMutation.isPending ? 'Completando...' : 'Completar apartado'}
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Footer */}
