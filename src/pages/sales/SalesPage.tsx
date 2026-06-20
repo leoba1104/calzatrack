@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Search, CalendarDays, Banknote, CreditCard, Smartphone, ArrowLeftRight, Eye } from 'lucide-react'
+import { Plus, Search, CalendarDays, Banknote, CreditCard, Smartphone, ArrowLeftRight, Eye, ClipboardCheck } from 'lucide-react'
 import {
   startOfDay, endOfDay,
   startOfWeek, endOfWeek,
@@ -13,6 +13,7 @@ import { formatCRC, formatDate, cn } from '@/lib/utils'
 import { SaleModal } from '@/components/sales/SaleModal'
 import { SaleDetailModal } from '@/components/sales/SaleDetailModal'
 import { DatePicker } from '@/components/ui/DatePicker'
+import { CierreCajaModal } from '@/components/reports/CierreCajaModal'
 import type { VentaTipo, VentaEstado } from '@/types'
 
 type Preset = 'hoy' | 'semana' | 'mes' | 'año' | 'custom'
@@ -102,6 +103,7 @@ export function SalesPage() {
   const [customTo, setCustomTo]     = useState('')
   const [empleadoId, setEmpleadoId]       = useState('')
   const [detailVentaId, setDetailVentaId] = useState<string | null>(null)
+  const [cierreOpen, setCierreOpen]       = useState(false)
 
   const dateRange = preset === 'custom'
     ? (customFrom || customTo ? {
@@ -207,13 +209,22 @@ export function SalesPage() {
           <h1 className="text-3xl font-bold text-gray-900">Ventas</h1>
           <p className="text-sm text-gray-500 mt-1">{activeTienda?.nombre}</p>
         </div>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Nueva venta
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCierreOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <ClipboardCheck className="w-4 h-4" />
+            Cierre de caja
+          </button>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Nueva venta
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col flex-1 min-h-0 bg-white rounded-xl border border-gray-200">
@@ -439,6 +450,8 @@ export function SalesPage() {
         isOpen={!!detailVentaId}
         onClose={() => setDetailVentaId(null)}
       />
+
+      <CierreCajaModal isOpen={cierreOpen} onClose={() => setCierreOpen(false)} />
     </div>
   )
 }

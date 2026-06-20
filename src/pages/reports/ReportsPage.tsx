@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardList, Plus, ChevronDown, ChevronRight } from 'lucide-react'
+import { ClipboardList, ChevronDown, ChevronRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, cn } from '@/lib/utils'
-import { CierreCajaModal } from '@/components/reports/CierreCajaModal'
 import type { CierreCaja } from '@/types'
 
 const METODO_LABELS: Record<string, string> = {
@@ -113,7 +112,6 @@ function CierreRow({ cierre }: { cierre: CierreCaja }) {
 
 export function ReportsPage() {
   const { activeTienda, isAdmin } = useAuth()
-  const [showModal, setShowModal] = useState(false)
 
   const { data: cierres = [], isLoading } = useQuery({
     queryKey: ['cierres', activeTienda?.id],
@@ -147,18 +145,9 @@ export function ReportsPage() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reportes</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Historial de cierres de caja</p>
-        </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-xl hover:bg-brand-700 transition-colors shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Cierre de caja
-        </button>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Reportes</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Historial de cierres de caja</p>
       </div>
 
       {/* Content */}
@@ -201,7 +190,6 @@ export function ReportsPage() {
         )}
       </div>
 
-      <CierreCajaModal isOpen={showModal} onClose={() => setShowModal(false)} />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Calculator, CheckCircle2 } from 'lucide-react'
 import { format, startOfDay, endOfDay } from 'date-fns'
@@ -7,7 +7,6 @@ import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Modal } from '@/components/ui/Modal'
-import { DatePicker } from '@/components/ui/DatePicker'
 import { Textarea } from '@/components/ui/Textarea'
 import { FormField } from '@/components/ui/FormField'
 import { formatCRC } from '@/lib/utils'
@@ -33,45 +32,41 @@ interface Preview {
   creditos_abiertos: number
 }
 
-type PagoRow = {
-  monto: number
-  tipo_pago: MetodoPago
-  venta: { tipo: VentaTipo } | null
-}
-
-type ItemRow = { cantidad: number }
-
 export function CierreCajaModal({ isOpen, onClose }: Props) {
   const { activeTienda, user } = useAuth()
   const qc = useQueryClient()
-  const today = format(new Date(), 'yyyy-MM-dd')
 
-  const [fecha, setFecha]       = useState(today)
-  const [notas, setNotas]       = useState('')
-  const [preview, setPreview]   = useState<Preview | null>(null)
-  const [loading, setLoading]   = useState(false)
+  const today    = format(new Date(), 'yyyy-MM-dd')
+  const startISO = startOfDay(new Date()).toISOString()
+  const endISO   = endOfDay(new Date()).toISOString()
+
+  const [notas, setNotas]     = useState('')
+  const [preview, setPreview] = useState<Preview | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  // Auto-calculate when modal opens
+  useEffect(() => {
+    if (isOpen && !preview) calcular()
+  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function calcular() {
     if (!activeTienda) return
     setLoading(true)
     setPreview(null)
     try {
-      const fechaDate = new Date(fecha + 'T12:00:00')
-      const startISO  = startOfDay(fechaDate).toISOString()
-      const endISO    = endOfDay(fechaDate).toISOString()
-
-      // 1. Get all ventas for this tienda (to filter pagos by venta_id)
+      // 1. All ventas for this tienda — needed to map venta_id → tipo
       const { data: ventasRaw, error: eVentas } = await supabase
         .from('ventas')
         .select('id, tipo, estado')
         .eq('tienda_id', activeTienda.id)
       if (eVentas) throw eVentas
+
       const tiendaVentaIds = (ventasRaw ?? []).map((v) => v.id)
       const ventaTipoMap = Object.fromEntries(
         (ventasRaw ?? []).map((v) => [v.id, v.tipo as VentaTipo])
       )
 
-      // 2. Get all pagos for today whose venta belongs to this tienda
+      // 2. Pagos received today that belong to this tienda's ventas
       const { data: pagosRaw, error: ePagos } = await supabase
         .from('pagos_venta')
         .select('monto, tipo_pago, venta_id')
@@ -80,12 +75,14 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         .lte('fecha', endISO)
       if (ePagos) throw ePagos
 
-      const pagos = (pagosRaw ?? []) as (Omit<PagoRow, 'venta'> & { venta_id: string })[]
+      const pagos = (pagosRaw ?? []) as { monto: number; tipo_pago: MetodoPago; venta_id: string }[]
 
-      // 3. Pares from contado ventas made today (stock physically left the store)
+      // 3. Pares: items from contado ventas paid today
       const contadoPagadas = (ventasRaw ?? [])
         .filter((v) => v.tipo === 'contado' && v.estado === 'pagada')
         .map((v) => v.id)
+
+      const pagadosHoyIds = new Set(pagos.map((p) => p.venta_id))
 
       const { data: itemsRaw, error: eItems } = await supabase
         .from('detalle_ventas')
@@ -93,13 +90,11 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         .in('venta_id', contadoPagadas.length ? contadoPagadas : [''])
       if (eItems) throw eItems
 
-      // Only count items for contado ventas that have a pago today
-      const pagadosHoyIds = new Set(pagos.map((p) => p.venta_id))
-      const pares = (itemsRaw ?? [] as (ItemRow & { venta_id: string })[])
+      const pares = (itemsRaw ?? [])
         .filter((i) => pagadosHoyIds.has(i.venta_id))
         .reduce((s, i) => s + i.cantidad, 0)
 
-      // 4. Count open apartados and créditos right now
+      // 4. Snapshot of open positions right now
       const [{ count: aptCount }, { count: credCount }] = await Promise.all([
         supabase.from('ventas').select('id', { count: 'exact', head: true })
           .eq('tienda_id', activeTienda.id).eq('tipo', 'apartado').eq('estado', 'pendiente'),
@@ -113,23 +108,21 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         total_contado: 0, total_apartados: 0, total_creditos: 0, total_dia: 0,
         pares_vendidos: pares,
         apartados_abiertos: aptCount ?? 0,
-        creditos_abiertos: credCount ?? 0,
+        creditos_abiertos:  credCount ?? 0,
       }
 
       for (const pago of pagos) {
-        const monto     = pago.monto
-        const metodo    = pago.tipo_pago as MetodoPago
-        const ventaTipo = ventaTipoMap[pago.venta_id]
-
-        result[metodo as keyof typeof result] = (result[metodo as keyof typeof result] as number) + monto
-        if (ventaTipo === 'contado')  result.total_contado   += monto
-        if (ventaTipo === 'apartado') result.total_apartados += monto
-        if (ventaTipo === 'credito')  result.total_creditos  += monto
-        result.total_dia += monto
+        const m = pago.tipo_pago
+        result[m as keyof typeof result] = (result[m as keyof typeof result] as number) + pago.monto
+        const t = ventaTipoMap[pago.venta_id]
+        if (t === 'contado')  result.total_contado   += pago.monto
+        if (t === 'apartado') result.total_apartados += pago.monto
+        if (t === 'credito')  result.total_creditos  += pago.monto
+        result.total_dia += pago.monto
       }
 
       setPreview(result)
-    } catch (e) {
+    } catch {
       toast.error('Error al calcular el cierre')
     } finally {
       setLoading(false)
@@ -141,7 +134,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
       if (!preview || !activeTienda || !user) throw new Error('Datos incompletos')
       const { error } = await supabase.from('cierres_caja').insert({
         tienda_id:          activeTienda.id,
-        fecha,
+        fecha:              today,
         efectivo:           preview.efectivo,
         tarjeta:            preview.tarjeta,
         sinpe:              preview.sinpe,
@@ -158,7 +151,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         cerrado_por:        user.id,
       })
       if (error) {
-        if (error.code === '23505') throw new Error('Ya existe un cierre para ese día')
+        if (error.code === '23505') throw new Error('Ya hay un cierre registrado para hoy')
         throw error
       }
     },
@@ -171,49 +164,35 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
   })
 
   function handleClose() {
-    setFecha(today)
     setNotas('')
     setPreview(null)
     setLoading(false)
     onClose()
   }
 
-  const fechaLabel = format(new Date(fecha + 'T12:00:00'), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
+  const fechaLabel = format(new Date(), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Cierre de caja">
-      <div className="space-y-5 px-6 py-4">
+      <div className="space-y-4 px-6 py-4">
 
-        {/* Date picker */}
-        <FormField label="Fecha del cierre">
-          <DatePicker value={fecha} onChange={(d) => { setFecha(d); setPreview(null) }} />
-        </FormField>
+        {/* Date badge — read-only, always today */}
+        <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5">
+          <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Fecha</p>
+          <p className="text-sm font-semibold text-gray-800 capitalize mt-0.5">{fechaLabel}</p>
+        </div>
 
-        {/* Calculate button */}
-        {!preview && (
-          <button
-            onClick={calcular}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-60 transition-colors"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
-            {loading ? 'Calculando...' : 'Calcular totales del día'}
-          </button>
+        {/* Loading */}
+        {loading && (
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Calculando totales...
+          </div>
         )}
 
         {/* Preview */}
-        {preview && (
+        {preview && !loading && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-700 capitalize">{fechaLabel}</p>
-              <button
-                onClick={calcular}
-                disabled={loading}
-                className="text-xs text-brand-600 hover:text-brand-700 font-medium"
-              >
-                Recalcular
-              </button>
-            </div>
 
             {/* Total highlight */}
             <div className="bg-brand-50 border border-brand-100 rounded-xl p-4 text-center">
@@ -238,6 +217,9 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
                   </div>
                 ))}
               </div>
+              {preview.total_dia === 0 && (
+                <p className="text-sm text-gray-400 text-center py-2">Sin pagos registrados hoy</p>
+              )}
             </div>
 
             {/* By sale type */}
@@ -245,9 +227,9 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Por tipo de venta</p>
               <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
                 {([
-                  ['Contado',    preview.total_contado],
-                  ['Apartados',  preview.total_apartados],
-                  ['Créditos',   preview.total_creditos],
+                  ['Contado',   preview.total_contado],
+                  ['Apartados', preview.total_apartados],
+                  ['Créditos',  preview.total_creditos],
                 ] as [string, number][]).map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
                     <span className="text-gray-600">{label}</span>
@@ -283,17 +265,27 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
               />
             </FormField>
 
-            {/* Confirm */}
-            <button
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending}
-              className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-60 transition-colors"
-            >
-              {saveMutation.isPending
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <CheckCircle2 className="w-4 h-4" />}
-              {saveMutation.isPending ? 'Guardando...' : 'Confirmar cierre'}
-            </button>
+            {/* Actions */}
+            <div className="flex gap-2">
+              <button
+                onClick={calcular}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-60 transition-colors"
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                Recalcular
+              </button>
+              <button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-60 transition-colors"
+              >
+                {saveMutation.isPending
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <CheckCircle2 className="w-4 h-4" />}
+                {saveMutation.isPending ? 'Guardando...' : 'Confirmar cierre'}
+              </button>
+            </div>
           </div>
         )}
       </div>
