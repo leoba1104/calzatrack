@@ -48,9 +48,11 @@ export function CreditoDetailModal({ venta, isOpen, onClose, onCompleted }: Cred
         .from('pagos_venta')
         .select('id, monto, tipo_pago, fecha, notas, created_at')
         .eq('venta_id', venta!.id)
-        .order('created_at', { ascending: false })
       if (error) throw error
-      return data as RichPago[]
+      // Sort client-side: newest first
+      return [...(data as RichPago[])].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
     },
     enabled: !!venta?.id && isOpen,
   })
