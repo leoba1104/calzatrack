@@ -10,7 +10,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Textarea } from '@/components/ui/Textarea'
 import { FormField } from '@/components/ui/FormField'
 import { formatCRC } from '@/lib/utils'
-import type { MetodoPago, VentaTipo, VentaCategoriaContado } from '@/types'
+import type { MetodoPago, VentaTipo } from '@/types'
+import { useCategoriasContado, CIERRE_COLOR_MAP } from '@/hooks/useCategoriasContado'
 
 interface Props {
   isOpen: boolean
@@ -33,30 +34,17 @@ interface Preview {
   total_apartados: number
   total_creditos: number
   total_dia: number
-  total_hombre: number
-  total_mujer: number
-  total_nino: number
-  total_fajas: number
-  total_bolsos: number
-  total_ofertas: number
+  categorias_totales: Record<string, number>
   pares_vendidos: number
   apartados_abiertos: number
   creditos_abiertos: number
   por_empleado: EmpleadoTotal[]
 }
 
-const CATEGORIAS: { key: VentaCategoriaContado; label: string; color: string }[] = [
-  { key: 'hombre',  label: 'Hombre',  color: 'bg-blue-50 text-blue-800' },
-  { key: 'mujer',   label: 'Mujer',   color: 'bg-pink-50 text-pink-800' },
-  { key: 'nino',    label: 'Niño',    color: 'bg-yellow-50 text-yellow-800' },
-  { key: 'fajas',   label: 'Fajas',   color: 'bg-purple-50 text-purple-800' },
-  { key: 'bolsos',  label: 'Bolsos',  color: 'bg-teal-50 text-teal-800' },
-  { key: 'ofertas', label: 'Ofertas', color: 'bg-red-50 text-red-800' },
-]
-
 export function CierreCajaModal({ isOpen, onClose }: Props) {
   const { activeTienda, user } = useAuth()
   const qc = useQueryClient()
+  const { data: categoriasContado = [] } = useCategoriasContado()
 
   const today  = format(new Date(), 'yyyy-MM-dd')
   const endISO = endOfDay(new Date()).toISOString()
@@ -95,7 +83,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
 
       const tiendaVentaIds      = (ventasRaw ?? []).map((v) => v.id)
       const ventaTipoMap        = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.tipo as VentaTipo]))
-      const ventaCategoriaMap   = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.categoria_venta as VentaCategoriaContado | null]))
+      const ventaCategoriaMap   = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.categoria_venta as string | null]))
       const ventaEmpleadoMap    = Object.fromEntries((ventasRaw ?? []).map((v) => [v.id, v.empleado_id as string | null]))
 
       // 3. Pagos since the last cierre (or start of day if first cierre)
@@ -146,7 +134,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         desde,
         efectivo: 0, tarjeta: 0, sinpe: 0, transferencia: 0, otro: 0,
         total_contado: 0, total_apartados: 0, total_creditos: 0, total_dia: 0,
-        total_hombre: 0, total_mujer: 0, total_nino: 0, total_fajas: 0, total_bolsos: 0, total_ofertas: 0,
+        categorias_totales: {},
         pares_vendidos: pares,
         apartados_abiertos: aptCount ?? 0,
         creditos_abiertos:  credCount ?? 0,
@@ -168,12 +156,9 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
 
         if (t === 'contado') {
           result.total_contado += pago.monto
-          if (cat === 'hombre')  result.total_hombre  += pago.monto
-          if (cat === 'mujer')   result.total_mujer   += pago.monto
-          if (cat === 'nino')    result.total_nino    += pago.monto
-          if (cat === 'fajas')   result.total_fajas   += pago.monto
-          if (cat === 'bolsos')  result.total_bolsos  += pago.monto
-          if (cat === 'ofertas') result.total_ofertas += pago.monto
+          if (cat) {
+            result.categorias_totales[cat] = (result.categorias_totales[cat] ?? 0) + pago.monto
+          }
         }
         if (t === 'apartado') result.total_apartados += pago.monto
         if (t === 'credito')  result.total_creditos  += pago.monto
@@ -211,12 +196,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         total_apartados:    preview.total_apartados,
         total_creditos:     preview.total_creditos,
         total_dia:          preview.total_dia,
-        total_hombre:       preview.total_hombre,
-        total_mujer:        preview.total_mujer,
-        total_nino:         preview.total_nino,
-        total_fajas:        preview.total_fajas,
-        total_bolsos:       preview.total_bolsos,
-        total_ofertas:      preview.total_ofertas,
+        categorias_totales: preview.categorias_totales,
         pares_vendidos:     preview.pares_vendidos,
         apartados_abiertos: preview.apartados_abiertos,
         creditos_abiertos:  preview.creditos_abiertos,
@@ -306,15 +286,15 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
                   Ventas normales — {formatCRC(preview.total_contado)}
                 </p>
                 <div className="grid grid-cols-3 gap-2">
-                  {CATEGORIAS.filter((c) => preview[`total_${c.key}` as keyof Preview] as number > 0).map((c) => {
-                    const value = preview[`total_${c.key}` as keyof Preview] as number
-                    return (
-                      <div key={c.key} className={`rounded-xl p-3 ${c.color}`}>
-                        <p className="text-xs font-medium opacity-70">{c.label}</p>
-                        <p className="text-sm font-bold mt-0.5">{formatCRC(value)}</p>
+                  {categoriasContado
+                    .filter((cat) => (preview.categorias_totales[cat.slug] ?? 0) > 0)
+                    .map((cat) => (
+                      <div key={cat.slug} className={`rounded-xl p-3 ${CIERRE_COLOR_MAP[cat.color] ?? 'bg-gray-50 text-gray-700'}`}>
+                        <p className="text-xs font-medium opacity-70">{cat.nombre}</p>
+                        <p className="text-sm font-bold mt-0.5">{formatCRC(preview.categorias_totales[cat.slug])}</p>
                       </div>
-                    )
-                  })}
+                    ))
+                  }
                 </div>
               </div>
             )}

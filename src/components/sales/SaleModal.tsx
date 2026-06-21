@@ -11,16 +11,8 @@ import { formatCRC } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
 import { PhoneInput } from '@/components/ui/PhoneInput'
-import type { Cliente, Empleado, VentaTipo, MetodoPago, VentaCategoriaContado } from '@/types'
-
-const CATEGORIAS_CONTADO: { value: VentaCategoriaContado; label: string }[] = [
-  { value: 'hombre',  label: 'Hombre' },
-  { value: 'mujer',   label: 'Mujer' },
-  { value: 'nino',    label: 'Niño' },
-  { value: 'fajas',   label: 'Fajas' },
-  { value: 'bolsos',  label: 'Bolsos' },
-  { value: 'ofertas', label: 'Ofertas' },
-]
+import type { Cliente, Empleado, VentaTipo, MetodoPago } from '@/types'
+import { useCategoriasContado } from '@/hooks/useCategoriasContado'
 
 const headerSchema = z.object({
   cliente_id:        z.string().optional(),
@@ -72,6 +64,7 @@ interface SaleModalProps {
 export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModalProps) {
   const { activeTienda } = useAuth()
   const qc = useQueryClient()
+  const { data: categoriasContado = [] } = useCategoriasContado()
 
   const [items, setItems] = useState<LineItem[]>([])
   const [productSearch, setProductSearch] = useState('')
@@ -389,20 +382,20 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
             {tipoActual === 'contado' && (
               <FormField label="Categoría" required>
                 <div className="grid grid-cols-3 gap-2">
-                  {CATEGORIAS_CONTADO.map(({ value, label }) => {
-                    const selected = watch('categoria_venta') === value
+                  {categoriasContado.map((cat) => {
+                    const selected = watch('categoria_venta') === cat.slug
                     return (
                       <button
-                        key={value}
+                        key={cat.slug}
                         type="button"
-                        onClick={() => setValue('categoria_venta', value)}
+                        onClick={() => setValue('categoria_venta', cat.slug)}
                         className={`py-2 text-sm font-medium rounded-xl border transition-colors ${
                           selected
                             ? 'bg-brand-600 text-white border-brand-600'
                             : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400 hover:text-brand-600'
                         }`}
                       >
-                        {label}
+                        {cat.nombre}
                       </button>
                     )
                   })}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ClipboardList, Eye, Search } from 'lucide-react'
+import { useCategoriasContado, CIERRE_COLOR_MAP } from '@/hooks/useCategoriasContado'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '@/lib/supabase'
@@ -28,6 +29,7 @@ const METODO_COLORS: Record<string, string> = {
 const METODOS = ['efectivo', 'tarjeta', 'sinpe', 'transferencia', 'otro'] as const
 
 function CierreDetailModal({ cierre, onClose }: { cierre: CierreCaja; onClose: () => void }) {
+  const { data: categoriasContado = [] } = useCategoriasContado()
   const fechaLabel  = format(new Date(cierre.fecha + 'T12:00:00'), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
   const desdeHora   = format(new Date(cierre.desde), 'HH:mm', { locale: es })
   const hastaHora   = format(new Date(cierre.created_at), 'HH:mm', { locale: es })
@@ -70,25 +72,34 @@ function CierreDetailModal({ cierre, onClose }: { cierre: CierreCaja; onClose: (
           </div>
         </div>
 
-        {/* Sale type breakdown (all types as one list) */}
+        {/* Sale type breakdown */}
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Por tipo de venta</p>
           <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
-            {([
-              ['Hombre',     cierre.total_hombre],
-              ['Mujer',      cierre.total_mujer],
-              ['Niño',       cierre.total_nino],
-              ['Fajas',      cierre.total_fajas],
-              ['Bolsos',     cierre.total_bolsos],
-              ['Ofertas',    cierre.total_ofertas],
-              ['Apartados',  cierre.total_apartados],
-              ['Créditos',   cierre.total_creditos],
-            ] as [string, number][]).filter(([, v]) => v > 0).map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
-                <span className="text-gray-600">{label}</span>
-                <span className="font-semibold text-gray-900">{formatCRC(value)}</span>
+            {categoriasContado
+              .filter((cat) => (cierre.categorias_totales?.[cat.slug] ?? 0) > 0)
+              .map((cat) => (
+                <div key={cat.slug} className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block w-2 h-2 rounded-full ${CIERRE_COLOR_MAP[cat.color]?.split(' ')[0] ?? 'bg-gray-200'}`} />
+                    <span className="text-gray-600">{cat.nombre}</span>
+                  </div>
+                  <span className="font-semibold text-gray-900">{formatCRC(cierre.categorias_totales[cat.slug])}</span>
+                </div>
+              ))
+            }
+            {cierre.total_apartados > 0 && (
+              <div className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
+                <span className="text-gray-600">Apartados</span>
+                <span className="font-semibold text-gray-900">{formatCRC(cierre.total_apartados)}</span>
               </div>
-            ))}
+            )}
+            {cierre.total_creditos > 0 && (
+              <div className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
+                <span className="text-gray-600">Créditos</span>
+                <span className="font-semibold text-gray-900">{formatCRC(cierre.total_creditos)}</span>
+              </div>
+            )}
             {cierre.total_dia === 0 && (
               <div className="px-4 py-3 text-sm text-gray-400 text-center">Sin ventas en este período</div>
             )}
