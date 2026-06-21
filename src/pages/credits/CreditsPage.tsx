@@ -73,8 +73,8 @@ export function CreditsPage() {
     onError: () => toast.error('Error al desarchivar el crédito'),
   })
 
-  const activos    = creditos?.filter(v => !(v as unknown as { archivado: boolean }).archivado) ?? []
-  const archivados = creditos?.filter(v =>  (v as unknown as { archivado: boolean }).archivado) ?? []
+  const activos    = creditos?.filter(v => !(v as unknown as { archivado: boolean }).archivado && v.estado !== 'pagada') ?? []
+  const archivados = creditos?.filter(v =>  (v as unknown as { archivado: boolean }).archivado || v.estado === 'pagada') ?? []
   const isEmpty    = !creditos?.length
 
   return (

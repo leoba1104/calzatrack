@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Search, CalendarDays, Banknote, CreditCard, Smartphone, ArrowLeftRight, Eye, ClipboardCheck } from 'lucide-react'
+import { Plus, Search, CalendarDays, Banknote, CreditCard, Smartphone, ArrowLeftRight, Eye, ClipboardCheck, X } from 'lucide-react'
 import {
   format,
   startOfDay, endOfDay,
@@ -325,6 +325,16 @@ export function SalesPage() {
               <span className="text-gray-400 text-xs">—</span>
               <DatePicker value={customTo} onChange={setCustomTo} placeholder="Hasta" className="w-44" />
             </div>
+          )}
+
+          {(search || empleadoId || preset !== 'hoy' || customFrom || customTo) && (
+            <button
+              onClick={() => { setSearch(''); setEmpleadoId(''); setPreset('hoy'); setCustomFrom(''); setCustomTo('') }}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shrink-0"
+            >
+              <X className="w-3 h-3" />
+              Limpiar
+            </button>
           )}
         </div>
 
