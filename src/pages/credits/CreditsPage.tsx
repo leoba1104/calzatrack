@@ -74,8 +74,12 @@ export function CreditsPage() {
     onError: () => toast.error('Error al desarchivar el crédito'),
   })
 
-  const activos    = creditos?.filter(v => !(v as unknown as { archivado: boolean }).archivado) ?? []
-  const archivados = creditos?.filter(v =>  (v as unknown as { archivado: boolean }).archivado) ?? []
+  const activos = creditos?.filter(v => {
+    if ((v as unknown as { archivado: boolean }).archivado) return false
+    const totalAbonado = ((v.pagos ?? []) as unknown as { monto: number }[]).reduce((s, p) => s + p.monto, 0)
+    return v.total - totalAbonado > 0.01
+  }) ?? []
+  const archivados = creditos?.filter(v => (v as unknown as { archivado: boolean }).archivado) ?? []
   const isEmpty    = !creditos?.length
 
   return (

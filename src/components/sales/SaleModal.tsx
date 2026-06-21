@@ -308,6 +308,13 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
           tipo_pago:  data.metodo_pago as MetodoPago,
         })
         if (pagoErr) throw pagoErr
+
+        // If initial payment covers the full balance, mark credit as paid
+        if (data.tipo === 'credito' && abonoInicial >= total) {
+          const { error: eComplete } = await supabase
+            .from('ventas').update({ estado: 'pagada' }).eq('id', venta.id)
+          if (eComplete) throw eComplete
+        }
       }
     },
     onSuccess: () => {
