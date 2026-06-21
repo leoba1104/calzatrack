@@ -33,7 +33,8 @@ export function CreditsPage() {
         `)
         .eq('tienda_id', activeTienda!.id)
         .eq('tipo', 'credito')
-        .order('archivado', { ascending: true })   // active first
+        .neq('estado', 'pagada')   // paid credits live in ventas history, not here
+        .order('archivado', { ascending: true })
         .order('created_at', { ascending: false })
       if (error) throw error
       return data as unknown as Venta[]
@@ -73,8 +74,8 @@ export function CreditsPage() {
     onError: () => toast.error('Error al desarchivar el crédito'),
   })
 
-  const activos    = creditos?.filter(v => !(v as unknown as { archivado: boolean }).archivado && v.estado !== 'pagada') ?? []
-  const archivados = creditos?.filter(v =>  (v as unknown as { archivado: boolean }).archivado || v.estado === 'pagada') ?? []
+  const activos    = creditos?.filter(v => !(v as unknown as { archivado: boolean }).archivado) ?? []
+  const archivados = creditos?.filter(v =>  (v as unknown as { archivado: boolean }).archivado) ?? []
   const isEmpty    = !creditos?.length
 
   return (
