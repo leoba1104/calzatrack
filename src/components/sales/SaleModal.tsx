@@ -296,14 +296,19 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
       )
       if (itemsErr) throw itemsErr
 
-      // 4. Contado: update estado → pagada (triggers stock decrement)
-      //    Apartado/Crédito: stay pendiente, no update needed
+      // 4. Stock management:
+      //    contado    → update estado → pagada (trigger decrements stock)
+      //    apartado/crédito → call RPC to reserve stock immediately at creation
       if (data.tipo === 'contado') {
         const { error: updateErr } = await supabase
           .from('ventas')
           .update({ estado: 'pagada' })
           .eq('id', venta.id)
         if (updateErr) throw updateErr
+      } else {
+        const { error: reservaErr } = await supabase
+          .rpc('reservar_stock_venta', { p_venta_id: venta.id })
+        if (reservaErr) throw reservaErr
       }
 
       // 5. Register payment
