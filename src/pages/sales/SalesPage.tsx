@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Banknote, CreditCard, Smartphone, ArrowLeftRight, ClipboardCheck, ReceiptText } from 'lucide-react'
+import { Plus, Banknote, CreditCard, ClipboardCheck, ReceiptText } from 'lucide-react'
 import { format, startOfDay, endOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '@/lib/supabase'
@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, cn } from '@/lib/utils'
 import { SaleModal } from '@/components/sales/SaleModal'
 import { CierreCajaModal } from '@/components/reports/CierreCajaModal'
-import { useCategoriasContado, BADGE_COLOR_MAP, CIERRE_COLOR_MAP } from '@/hooks/useCategoriasContado'
+import { useCategoriasContado, BADGE_COLOR_MAP } from '@/hooks/useCategoriasContado'
 import type { VentaTipo } from '@/types'
 
 type RawPago = {
@@ -23,24 +23,9 @@ type RawPago = {
   } | null
 }
 
-const METODO_ICON: Record<string, React.ElementType> = {
-  efectivo:      Banknote,
-  tarjeta:       CreditCard,
-  sinpe:         Smartphone,
-  transferencia: ArrowLeftRight,
-}
-
 const METODO_LABEL: Record<string, string> = {
   efectivo: 'Efectivo', tarjeta: 'Tarjeta',
-  sinpe: 'SINPE', transferencia: 'Transferencia', otro: 'Otro',
-}
-
-const METODO_COLOR: Record<string, string> = {
-  efectivo:      'bg-green-50  text-green-700  border-green-100',
-  tarjeta:       'bg-blue-50   text-blue-700   border-blue-100',
-  sinpe:         'bg-purple-50 text-purple-700 border-purple-100',
-  transferencia: 'bg-orange-50 text-orange-700 border-orange-100',
-  otro:          'bg-gray-50   text-gray-600   border-gray-100',
+  sinpe: 'SINPE', transferencia: 'Transfer.', otro: 'Otro',
 }
 
 const TIPO_ABONO_LABEL: Record<string, string> = {
@@ -102,12 +87,9 @@ export function SalesPage() {
   })
 
   // Totals
-  const totalDia = pagos.reduce((s, p) => s + p.monto, 0)
-
-  const porMetodo = ['efectivo', 'tarjeta', 'sinpe', 'transferencia', 'otro'].map((m) => ({
-    key: m,
-    total: pagos.filter(p => p.tipo_pago === m).reduce((s, p) => s + p.monto, 0),
-  }))
+  const totalDia    = pagos.reduce((s, p) => s + p.monto, 0)
+  const totalCaja   = pagos.filter(p => p.tipo_pago === 'efectivo').reduce((s, p) => s + p.monto, 0)
+  const totalCuenta = totalDia - totalCaja
 
   const porCategoria = categoriasContado.map((cat) => ({
     ...cat,
@@ -118,6 +100,12 @@ export function SalesPage() {
 
   const totalApartados = pagos.filter(p => p.venta?.tipo === 'apartado').reduce((s, p) => s + p.monto, 0)
   const totalCreditos  = pagos.filter(p => p.venta?.tipo === 'credito').reduce((s, p) => s + p.monto, 0)
+
+  const tiposDesglose = [
+    ...porCategoria.filter(c => c.total > 0).map(c => ({ label: c.nombre, total: c.total, color: c.color })),
+    ...(totalApartados > 0 ? [{ label: 'Apartados', total: totalApartados, color: 'blue' }] : []),
+    ...(totalCreditos  > 0 ? [{ label: 'Créditos',  total: totalCreditos,  color: 'orange' }] : []),
+  ]
 
   const hasPagos = pagos.length > 0
 
@@ -158,56 +146,48 @@ export function SalesPage() {
         </div>
       )}
 
-      {/* Total del día */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">
-          {cierreDesde ? 'Total post-cierre' : 'Total del día'}
-        </p>
-        <p className="text-4xl font-bold text-brand-700">{formatCRC(totalDia)}</p>
-      </div>
-
-      {/* Payment method breakdown */}
-      <div className="grid grid-cols-5 gap-3">
-        {porMetodo.filter(m => m.total > 0 || m.key === 'efectivo').map(({ key, total }) => {
-          const Icon = METODO_ICON[key]
-          return (
-            <div key={key} className={cn('rounded-xl border p-3', METODO_COLOR[key])}>
-              <div className="flex items-center gap-1.5 mb-1">
-                {Icon && <Icon className="w-3.5 h-3.5 opacity-60" />}
-                <p className="text-xs font-medium opacity-70">{METODO_LABEL[key]}</p>
-              </div>
-              <p className="text-base font-bold">{formatCRC(total)}</p>
+      {/* Stats card — total + caja/cuenta + tipo desglose */}
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        {/* Total row */}
+        <div className="px-6 py-5 flex items-center justify-between border-b border-gray-100">
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+              {cierreDesde ? 'Total post-cierre' : 'Total del día'}
+            </p>
+            <p className="text-3xl font-bold text-brand-700 mt-0.5">{formatCRC(totalDia)}</p>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <p className="text-xs text-gray-400 flex items-center justify-end gap-1.5 mb-0.5">
+                <Banknote className="w-3.5 h-3.5" />
+                Caja (efectivo)
+              </p>
+              <p className="text-lg font-bold text-gray-800">{formatCRC(totalCaja)}</p>
             </div>
-          )
-        })}
-      </div>
-
-      {/* Category breakdown */}
-      {(porCategoria.some(c => c.total > 0) || totalApartados > 0 || totalCreditos > 0) && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Por tipo de venta</p>
-          <div className="grid grid-cols-4 gap-2">
-            {porCategoria.filter(c => c.total > 0).map((cat) => (
-              <div key={cat.slug} className={cn('rounded-xl p-3', CIERRE_COLOR_MAP[cat.color] ?? 'bg-gray-50 text-gray-700')}>
-                <p className="text-xs font-medium opacity-70">{cat.nombre}</p>
-                <p className="text-sm font-bold mt-0.5">{formatCRC(cat.total)}</p>
-              </div>
-            ))}
-            {totalApartados > 0 && (
-              <div className="rounded-xl p-3 bg-blue-50 text-blue-800">
-                <p className="text-xs font-medium opacity-70">Apartados</p>
-                <p className="text-sm font-bold mt-0.5">{formatCRC(totalApartados)}</p>
-              </div>
-            )}
-            {totalCreditos > 0 && (
-              <div className="rounded-xl p-3 bg-orange-50 text-orange-800">
-                <p className="text-xs font-medium opacity-70">Créditos</p>
-                <p className="text-sm font-bold mt-0.5">{formatCRC(totalCreditos)}</p>
-              </div>
-            )}
+            <div className="w-px h-8 bg-gray-100" />
+            <div className="text-right">
+              <p className="text-xs text-gray-400 flex items-center justify-end gap-1.5 mb-0.5">
+                <CreditCard className="w-3.5 h-3.5" />
+                Cuenta (tarjeta / SINPE / transf.)
+              </p>
+              <p className="text-lg font-bold text-gray-800">{formatCRC(totalCuenta)}</p>
+            </div>
           </div>
         </div>
-      )}
+
+        {/* Tipo desglose — compact row list */}
+        {tiposDesglose.length > 0 && (
+          <div className="px-6 py-3 flex items-center gap-1 flex-wrap">
+            <span className="text-xs text-gray-400 mr-2 shrink-0">Por tipo:</span>
+            {tiposDesglose.map(({ label, total }) => (
+              <span key={label} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-100 text-xs text-gray-600">
+                <span className="font-medium text-gray-900">{label}</span>
+                <span className="text-gray-400">{formatCRC(total)}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Transaction list */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
@@ -232,7 +212,6 @@ export function SalesPage() {
               const cat   = tipo === 'contado'
                 ? categoriasContado.find(c => c.slug === p.venta?.categoria_venta)
                 : null
-              const Icon  = METODO_ICON[p.tipo_pago]
               return (
                 <div key={p.id} className="flex items-center gap-4 px-4 py-3">
                   <span className="text-xs text-gray-400 w-12 shrink-0 tabular-nums">
@@ -253,8 +232,7 @@ export function SalesPage() {
 
                   <span className="font-semibold text-gray-900 tabular-nums">{formatCRC(p.monto)}</span>
 
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-gray-50 text-gray-500 border border-gray-100 shrink-0">
-                    {Icon && <Icon className="w-3 h-3" />}
+                  <span className="px-2 py-0.5 rounded text-xs bg-gray-50 text-gray-500 border border-gray-100 shrink-0">
                     {METODO_LABEL[p.tipo_pago] ?? p.tipo_pago}
                   </span>
                 </div>
