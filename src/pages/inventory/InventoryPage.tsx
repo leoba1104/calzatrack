@@ -109,15 +109,37 @@ export function InventoryPage() {
 
   const deleteProducto = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('productos').delete().eq('id', id)
-      if (!error) return 'deleted'
-      if (error.code === '23503') {
-        // FK violation: a variant is referenced by an active apartado or crédito
+      // Get all variant IDs for this product
+      const { data: variantesData } = await supabase
+        .from('variantes_producto')
+        .select('id')
+        .eq('producto_id', id)
+      const varIds = (variantesData ?? []).map((v) => v.id)
+
+      // Check if any variant is referenced by an unpaid active venta
+      const hasActiveRef = varIds.length > 0
+        ? ((await supabase
+            .from('detalle_ventas')
+            .select('id, venta:ventas!inner(estado)')
+            .in('variante_id', varIds)
+            .eq('ventas.estado', 'pendiente')
+            .limit(1)
+          ).data ?? []).length > 0
+        : false
+
+      if (hasActiveRef) {
         const { error: e2 } = await supabase.from('productos').update({ activo: false }).eq('id', id)
         if (e2) throw e2
         return 'deactivated'
       }
-      throw error
+
+      // Safe to hard delete — clear inventario_tienda rows first
+      if (varIds.length > 0) {
+        await supabase.from('inventario_tienda').delete().in('variante_id', varIds)
+      }
+      const { error } = await supabase.from('productos').delete().eq('id', id)
+      if (error) throw error
+      return 'deleted'
     },
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['inventario'] })
@@ -133,15 +155,25 @@ export function InventoryPage() {
 
   const deleteVariante = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('variantes_producto').delete().eq('id', id)
-      if (!error) return 'deleted'
-      if (error.code === '23503') {
-        // FK violation: variant is referenced by an active apartado or crédito
+      // Check for unpaid active references: detalle_ventas joined to pendiente ventas
+      const { data: activeRefs } = await supabase
+        .from('detalle_ventas')
+        .select('id, venta:ventas!inner(estado)')
+        .eq('variante_id', id)
+        .eq('ventas.estado', 'pendiente')
+        .limit(1)
+
+      if ((activeRefs ?? []).length > 0) {
         const { error: e2 } = await supabase.from('variantes_producto').update({ activo: false }).eq('id', id)
         if (e2) throw e2
         return 'deactivated'
       }
-      throw error
+
+      // No unpaid references — clear inventario_tienda first to avoid FK block, then hard delete
+      await supabase.from('inventario_tienda').delete().eq('variante_id', id)
+      const { error } = await supabase.from('variantes_producto').delete().eq('id', id)
+      if (error) throw error
+      return 'deleted'
     },
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['inventario'] })

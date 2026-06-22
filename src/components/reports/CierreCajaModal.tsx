@@ -209,16 +209,27 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
       })
       if (error) throw error
 
-      // Cleanup: delete contado ventas covered by this cierre.
-      // CASCADE removes their detalle_ventas and pagos_venta automatically.
-      const { error: cleanupErr } = await supabase
+      // Cleanup: delete all ventas the cierre has captured.
+      // - contado: scoped by creation date (ephemeral, deleted every cierre)
+      // - apartado/crédito pagados: delete regardless of creation date since
+      //   their payments are now persisted in the cierre totals
+      // CASCADE removes detalle_ventas and pagos_venta automatically.
+      const { error: cleanupContado } = await supabase
         .from('ventas')
         .delete()
         .eq('tienda_id', activeTienda.id)
         .eq('tipo', 'contado')
         .gt('created_at', preview.desde)
         .lte('created_at', hasta)
-      if (cleanupErr) throw cleanupErr
+      if (cleanupContado) throw cleanupContado
+
+      const { error: cleanupPagadas } = await supabase
+        .from('ventas')
+        .delete()
+        .eq('tienda_id', activeTienda.id)
+        .eq('estado', 'pagada')
+        .in('tipo', ['apartado', 'credito'])
+      if (cleanupPagadas) throw cleanupPagadas
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cierres'] })
