@@ -116,25 +116,35 @@ export function InventoryPage() {
         .eq('producto_id', id)
       const varIds = (variantesData ?? []).map((v) => v.id)
 
-      // Check if any variant is referenced by an unpaid active venta
-      const hasActiveRef = varIds.length > 0
-        ? ((await supabase
-            .from('detalle_ventas')
-            .select('id, venta:ventas!inner(estado)')
-            .in('variante_id', varIds)
-            .eq('ventas.estado', 'pendiente')
+      // Check if any variant is referenced by an unpaid (pendiente) venta
+      let hasUnpaid = false
+      if (varIds.length > 0) {
+        const { data: detalles } = await supabase
+          .from('detalle_ventas')
+          .select('venta_id')
+          .in('variante_id', varIds)
+        const ventaIds = [...new Set((detalles ?? []).map((d) => d.venta_id))]
+        if (ventaIds.length > 0) {
+          const { data: unpaid } = await supabase
+            .from('ventas')
+            .select('id')
+            .in('id', ventaIds)
+            .eq('estado', 'pendiente')
             .limit(1)
-          ).data ?? []).length > 0
-        : false
+          hasUnpaid = (unpaid ?? []).length > 0
+        }
+      }
 
-      if (hasActiveRef) {
+      if (hasUnpaid) {
         const { error: e2 } = await supabase.from('productos').update({ activo: false }).eq('id', id)
         if (e2) throw e2
         return 'deactivated'
       }
 
-      // Safe to hard delete — clear inventario_tienda rows first
+      // All references are from completed sales — safe to hard delete.
+      // Remove child rows first: detalle_ventas, inventario_tienda, then variants, then product.
       if (varIds.length > 0) {
+        await supabase.from('detalle_ventas').delete().in('variante_id', varIds)
         await supabase.from('inventario_tienda').delete().in('variante_id', varIds)
       }
       const { error } = await supabase.from('productos').delete().eq('id', id)
@@ -155,21 +165,34 @@ export function InventoryPage() {
 
   const deleteVariante = useMutation({
     mutationFn: async (id: string) => {
-      // Check for unpaid active references: detalle_ventas joined to pendiente ventas
-      const { data: activeRefs } = await supabase
+      // Get all venta_ids that reference this variant
+      const { data: detalles } = await supabase
         .from('detalle_ventas')
-        .select('id, venta:ventas!inner(estado)')
+        .select('venta_id')
         .eq('variante_id', id)
-        .eq('ventas.estado', 'pendiente')
-        .limit(1)
 
-      if ((activeRefs ?? []).length > 0) {
+      const ventaIds = [...new Set((detalles ?? []).map((d) => d.venta_id))]
+
+      // Check if any of those ventas are still unpaid (pendiente)
+      const hasUnpaid = ventaIds.length > 0
+        ? ((await supabase
+            .from('ventas')
+            .select('id')
+            .in('id', ventaIds)
+            .eq('estado', 'pendiente')
+            .limit(1)
+          ).data ?? []).length > 0
+        : false
+
+      if (hasUnpaid) {
         const { error: e2 } = await supabase.from('variantes_producto').update({ activo: false }).eq('id', id)
         if (e2) throw e2
         return 'deactivated'
       }
 
-      // No unpaid references — clear inventario_tienda first to avoid FK block, then hard delete
+      // All references are from completed sales — safe to hard delete.
+      // Must remove child rows first: detalle_ventas, then inventario_tienda.
+      await supabase.from('detalle_ventas').delete().eq('variante_id', id)
       await supabase.from('inventario_tienda').delete().eq('variante_id', id)
       const { error } = await supabase.from('variantes_producto').delete().eq('id', id)
       if (error) throw error
