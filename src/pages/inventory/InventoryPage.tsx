@@ -109,40 +109,21 @@ export function InventoryPage() {
 
   const deleteProducto = useMutation({
     mutationFn: async (id: string) => {
-      // Check if any variant of this product has sales history
-      const { data: variantes } = await supabase
-        .from('variantes_producto')
-        .select('id')
-        .eq('producto_id', id)
-
-      const varianteIds = (variantes ?? []).map((v) => v.id)
-
-      if (varianteIds.length > 0) {
-        const { count } = await supabase
-          .from('detalle_ventas')
-          .select('id', { count: 'exact', head: true })
-          .in('variante_id', varianteIds)
-
-        if (count && count > 0) {
-          // Has sales — soft delete the product (sets activo=false on all its variants)
-          const { error } = await supabase
-            .from('productos')
-            .update({ activo: false })
-            .eq('id', id)
-          if (error) throw error
-          return 'deactivated'
-        }
-      }
-
       const { error } = await supabase.from('productos').delete().eq('id', id)
-      if (error) throw error
-      return 'deleted'
+      if (!error) return 'deleted'
+      if (error.code === '23503') {
+        // FK violation: a variant is referenced by an active apartado or crédito
+        const { error: e2 } = await supabase.from('productos').update({ activo: false }).eq('id', id)
+        if (e2) throw e2
+        return 'deactivated'
+      }
+      throw error
     },
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['inventario'] })
       setConfirmTarget(null)
       if (result === 'deactivated') {
-        toast.success('Producto desactivado — tiene ventas registradas y no puede eliminarse')
+        toast.success('Producto desactivado — está en un apartado o crédito activo')
       } else {
         toast.success('Producto eliminado')
       }
@@ -152,32 +133,21 @@ export function InventoryPage() {
 
   const deleteVariante = useMutation({
     mutationFn: async (id: string) => {
-      // Check if this variant has any sales history
-      const { count } = await supabase
-        .from('detalle_ventas')
-        .select('id', { count: 'exact', head: true })
-        .eq('variante_id', id)
-
-      if (count && count > 0) {
-        // Has sales — soft delete (deactivate) to preserve history
-        const { error } = await supabase
-          .from('variantes_producto')
-          .update({ activo: false })
-          .eq('id', id)
-        if (error) throw error
+      const { error } = await supabase.from('variantes_producto').delete().eq('id', id)
+      if (!error) return 'deleted'
+      if (error.code === '23503') {
+        // FK violation: variant is referenced by an active apartado or crédito
+        const { error: e2 } = await supabase.from('variantes_producto').update({ activo: false }).eq('id', id)
+        if (e2) throw e2
         return 'deactivated'
-      } else {
-        // No sales — safe to hard delete
-        const { error } = await supabase.from('variantes_producto').delete().eq('id', id)
-        if (error) throw error
-        return 'deleted'
       }
+      throw error
     },
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['inventario'] })
       setConfirmTarget(null)
       if (result === 'deactivated') {
-        toast.success('Variante desactivada — tiene ventas registradas y no puede eliminarse')
+        toast.success('Variante desactivada — está en un apartado o crédito activo')
       } else {
         toast.success('Variante eliminada')
       }

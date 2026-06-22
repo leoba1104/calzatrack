@@ -122,6 +122,21 @@ function CierreDetailModal({ cierre, onClose }: { cierre: CierreCaja; onClose: (
           </div>
         </div>
 
+        {/* By employee */}
+        {(cierre.breakdown_empleados ?? []).length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Por empleado</p>
+            <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+              {(cierre.breakdown_empleados ?? []).map(({ nombre, total }) => (
+                <div key={nombre} className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
+                  <span className="text-gray-600">{nombre}</span>
+                  <span className="font-semibold text-gray-900">{formatCRC(total)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {cierre.notas && !esAutoCierre && (
           <p className="text-xs text-gray-500 italic border-t border-gray-100 pt-3">
             "{cierre.notas}"

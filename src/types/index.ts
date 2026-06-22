@@ -218,6 +218,7 @@ export interface CierreCaja {
   total_creditos: number
   total_dia: number
   categorias_totales: Record<string, number>
+  breakdown_empleados: { nombre: string; total: number }[]
   pares_vendidos: number
   apartados_abiertos: number
   creditos_abiertos: number

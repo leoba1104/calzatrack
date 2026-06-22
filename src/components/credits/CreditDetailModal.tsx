@@ -94,12 +94,13 @@ export function CreditDetailModal({ venta, isOpen, onClose, onCompleted }: Credi
       })
       if (error) throw error
 
-      // Auto-complete: if this payment covers the remaining balance, mark as paid
+      // Auto-complete: if this payment covers the remaining balance, delete the record.
+      // CASCADE removes detalle_ventas and pagos_venta automatically.
       const nuevoSaldo = saldo - montoNum
       if (nuevoSaldo <= 0.01) {
-        const { error: eUpdate } = await supabase
-          .from('ventas').update({ estado: 'pagada' }).eq('id', venta!.id)
-        if (eUpdate) throw eUpdate
+        const { error: eDelete } = await supabase
+          .from('ventas').delete().eq('id', venta!.id)
+        if (eDelete) throw eDelete
         return true
       }
       return false

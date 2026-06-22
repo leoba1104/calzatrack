@@ -35,10 +35,10 @@ interface Preview {
   total_creditos: number
   total_dia: number
   categorias_totales: Record<string, number>
+  breakdown_empleados: EmpleadoTotal[]
   pares_vendidos: number
   apartados_abiertos: number
   creditos_abiertos: number
-  por_empleado: EmpleadoTotal[]
 }
 
 export function CierreCajaModal({ isOpen, onClose }: Props) {
@@ -135,10 +135,10 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         efectivo: 0, tarjeta: 0, sinpe: 0, transferencia: 0, otro: 0,
         total_contado: 0, total_apartados: 0, total_creditos: 0, total_dia: 0,
         categorias_totales: {},
+        breakdown_empleados: [],
         pares_vendidos: pares,
         apartados_abiertos: aptCount ?? 0,
         creditos_abiertos:  credCount ?? 0,
-        por_empleado: [],
       }
 
       const empleadoTotals: Record<string, number> = {}
@@ -168,7 +168,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
         if (empId) empleadoTotals[empId] = (empleadoTotals[empId] ?? 0) + pago.monto
       }
 
-      result.por_empleado = Object.entries(empleadoTotals)
+      result.breakdown_empleados = Object.entries(empleadoTotals)
         .map(([id, total]) => ({ nombre: empleadoNombreMap[id] ?? 'Sin asignar', total }))
         .sort((a, b) => b.total - a.total)
 
@@ -183,27 +183,42 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!preview || !activeTienda || !user) throw new Error('Datos incompletos')
+
+      const hasta = new Date().toISOString()
+
       const { error } = await supabase.from('cierres_caja').insert({
-        tienda_id:          activeTienda.id,
-        fecha:              today,
-        desde:              preview.desde,
-        efectivo:           preview.efectivo,
-        tarjeta:            preview.tarjeta,
-        sinpe:              preview.sinpe,
-        transferencia:      preview.transferencia,
-        otro:               preview.otro,
-        total_contado:      preview.total_contado,
-        total_apartados:    preview.total_apartados,
-        total_creditos:     preview.total_creditos,
-        total_dia:          preview.total_dia,
-        categorias_totales: preview.categorias_totales,
-        pares_vendidos:     preview.pares_vendidos,
-        apartados_abiertos: preview.apartados_abiertos,
-        creditos_abiertos:  preview.creditos_abiertos,
-        notas:              notas.trim() || null,
-        cerrado_por:        user.id,
+        tienda_id:           activeTienda.id,
+        fecha:               today,
+        desde:               preview.desde,
+        efectivo:            preview.efectivo,
+        tarjeta:             preview.tarjeta,
+        sinpe:               preview.sinpe,
+        transferencia:       preview.transferencia,
+        otro:                preview.otro,
+        total_contado:       preview.total_contado,
+        total_apartados:     preview.total_apartados,
+        total_creditos:      preview.total_creditos,
+        total_dia:           preview.total_dia,
+        categorias_totales:  preview.categorias_totales,
+        breakdown_empleados: preview.breakdown_empleados,
+        pares_vendidos:      preview.pares_vendidos,
+        apartados_abiertos:  preview.apartados_abiertos,
+        creditos_abiertos:   preview.creditos_abiertos,
+        notas:               notas.trim() || null,
+        cerrado_por:         user.id,
       })
       if (error) throw error
+
+      // Cleanup: delete contado ventas covered by this cierre.
+      // CASCADE removes their detalle_ventas and pagos_venta automatically.
+      const { error: cleanupErr } = await supabase
+        .from('ventas')
+        .delete()
+        .eq('tienda_id', activeTienda.id)
+        .eq('tipo', 'contado')
+        .gt('created_at', preview.desde)
+        .lte('created_at', hasta)
+      if (cleanupErr) throw cleanupErr
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cierres'] })
@@ -321,11 +336,11 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
             )}
 
             {/* By employee */}
-            {preview.por_empleado.length > 0 && (
+            {preview.breakdown_empleados.length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Por empleado</p>
                 <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
-                  {preview.por_empleado.map(({ nombre, total }) => (
+                  {preview.breakdown_empleados.map(({ nombre, total }) => (
                     <div key={nombre} className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
                       <span className="text-gray-600">{nombre}</span>
                       <span className="font-semibold text-gray-900">{formatCRC(total)}</span>
