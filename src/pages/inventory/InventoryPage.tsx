@@ -1,6 +1,6 @@
 import { useState, useMemo, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Package, Pencil, ChevronDown, ChevronRight, Trash2, X, Upload } from 'lucide-react'
+import { Plus, Search, Package, Pencil, ChevronDown, ChevronRight, Trash2, X, Upload, Tag } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -59,7 +59,7 @@ export function InventoryPage() {
           .order('nombre'),
         supabase
           .from('variantes_producto')
-          .select('id, producto_id, sku, talla, color, precio, activo, created_at, updated_at')
+          .select('id, producto_id, sku, talla, color, precio, precio_costo, en_oferta, precio_oferta, activo, created_at, updated_at')
           .order('talla'),
         supabase
           .from('inventario_tienda')
@@ -486,16 +486,33 @@ export function InventoryPage() {
                           <tr key={v.id} className="bg-purple-50/30 border-b border-gray-50 hover:bg-purple-50/50 transition-colors">
                             <td className="px-4 py-2.5" />
                             <td className="px-4 py-2.5 pl-8">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-mono text-xs text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded">{v.sku}</span>
                                 {v.talla && <span className="text-xs text-gray-500">Talla {v.talla}</span>}
                                 {v.color && <span className="text-xs text-gray-500">· {v.color}</span>}
+                                {v.en_oferta && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">
+                                    <Tag className="w-3 h-3" />OFERTA
+                                  </span>
+                                )}
                                 {!v.activo && <span className="text-orange-500 text-xs">(inactiva)</span>}
                               </div>
                             </td>
                             <td className="px-4 py-2.5" colSpan={2} />
-                            <td className="px-4 py-2.5 text-center text-sm font-semibold text-gray-800">
-                              {formatCRC(v.precio)}
+                            <td className="px-4 py-2.5 text-center">
+                              {v.en_oferta && v.precio_oferta ? (
+                                <div>
+                                  <p className="text-xs text-gray-400 line-through">{formatCRC(v.precio)}</p>
+                                  <p className="text-sm font-bold text-orange-600">{formatCRC(v.precio_oferta)}</p>
+                                </div>
+                              ) : (
+                                <p className="text-sm font-semibold text-gray-800">{formatCRC(v.precio)}</p>
+                              )}
+                              {v.precio_costo > 0 && (
+                                <p className="text-xs text-emerald-600 mt-0.5">
+                                  +{Math.round(((v.en_oferta && v.precio_oferta ? v.precio_oferta : v.precio) - v.precio_costo) / v.precio_costo * 100)}% ganancia
+                                </p>
+                              )}
                             </td>
                             <td className="px-4 py-2.5 text-center">
                               <span className={cn(

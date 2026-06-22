@@ -7,7 +7,7 @@ import { Search, Plus, Trash, ShoppingCart } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { formatCRC } from '@/lib/utils'
+import { formatCRC, cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
 import { PhoneInput } from '@/components/ui/PhoneInput'
@@ -21,7 +21,7 @@ const headerSchema = z.object({
   categoria_venta:   z.string().optional(),
   // z.enum rechaza "" (cadena vacía del <select>); validamos el valor real en la mutación
   metodo_pago:       z.string().optional(),
-  descuento:         z.number().min(0).default(0),
+  descuento:         z.number().min(0).max(100).default(0),
   abono_inicial:     z.number().min(0).default(0),
   notas:             z.string().optional(),
   // Contact fields — required for apartados (stored directly on the venta)
@@ -39,6 +39,7 @@ interface LineItem {
   cantidad: number
   precio_unitario: number
   stock_disponible: number
+  en_oferta: boolean
 }
 
 interface DisponibleRow {
@@ -50,6 +51,9 @@ interface DisponibleRow {
     talla: string | null
     color: string | null
     precio: number
+    precio_costo: number
+    en_oferta: boolean
+    precio_oferta: number | null
     activo: boolean
     producto: { nombre: string }
   }
@@ -138,7 +142,7 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
           variante_id,
           stock,
           variante:variantes_producto!inner(
-            id, sku, talla, color, precio, activo,
+            id, sku, talla, color, precio, precio_costo, en_oferta, precio_oferta, activo,
             producto:productos!inner(nombre)
           )
         `)
@@ -164,6 +168,8 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
     })
   }, [disponibles, productSearch])
 
+  const hayOferta = items.some((i) => i.en_oferta)
+
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, i) => sum + i.cantidad * i.precio_unitario, 0)
     return { subtotal }
@@ -176,7 +182,9 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
   }
 
   function addDisponible(d: DisponibleRow) {
-    const id = d.variante_id
+    const id  = d.variante_id
+    const v   = d.variante
+    const precioFinal = v.en_oferta && v.precio_oferta ? v.precio_oferta : v.precio
     setItems((prev) => {
       const idx = prev.findIndex((i) => i.variante_id === id)
       if (idx >= 0) {
@@ -187,12 +195,13 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
         )
       }
       return [...prev, {
-        variante_id: id,
-        display: displayName(d),
-        sku: d.variante.sku,
-        cantidad: 1,
-        precio_unitario: d.variante.precio,
+        variante_id:     id,
+        display:         displayName(d),
+        sku:             v.sku,
+        cantidad:        1,
+        precio_unitario: precioFinal,
         stock_disponible: d.stock,
+        en_oferta:       v.en_oferta,
       }]
     })
     setProductSearch('')
@@ -232,9 +241,10 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
       const abonoInicial = data.abono_inicial ?? 0
       if (tipoActual !== 'contado' && abonoInicial > 0 && !data.metodo_pago) throw new Error('NO_PAGO')
 
-      const descuento = data.descuento ?? 0
+      const descuentoPct = hayOferta ? 0 : (data.descuento ?? 0)
       const { subtotal } = totals
       const impuesto = 0
+      const descuento = Math.round(subtotal * descuentoPct / 100)
       const total = subtotal - descuento
 
       // 1. Get sequential number
@@ -340,8 +350,9 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
     },
   })
 
-  const descuentoActual = watch('descuento') ?? 0
-  const grandTotal = Math.max(0, totals.subtotal - (descuentoActual || 0))
+  const descuentoPct   = hayOferta ? 0 : (watch('descuento') ?? 0)
+  const descuentoMonto = Math.round(totals.subtotal * descuentoPct / 100)
+  const grandTotal     = Math.max(0, totals.subtotal - descuentoMonto)
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Nueva venta" size="xl">
@@ -487,15 +498,25 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
               </div>
             )}
 
-            <FormField label="Descuento (₡)">
-              <input
-                {...register('descuento', { valueAsNumber: true })}
-                type="number"
-                min="0"
-                step="1"
-                className={inputClass()}
-                placeholder="0"
-              />
+            <FormField label="Descuento (%)">
+              <div className="relative">
+                <input
+                  {...register('descuento', { valueAsNumber: true })}
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  disabled={hayOferta}
+                  className={cn(inputClass(), hayOferta && 'opacity-40 cursor-not-allowed bg-gray-50')}
+                  placeholder="0"
+                />
+                {hayOferta && (
+                  <p className="mt-1 text-xs text-orange-600">Sin descuento adicional en items de oferta</p>
+                )}
+                {!hayOferta && descuentoPct > 0 && (
+                  <p className="mt-1 text-xs text-gray-400">= {formatCRC(descuentoMonto)} de descuento</p>
+                )}
+              </div>
             </FormField>
 
             <FormField label="Notas">
@@ -538,7 +559,14 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-xs text-gray-400">Stock: {d.stock}</span>
-                          <span className="font-medium text-brand-700">{formatCRC(d.variante.precio)}</span>
+                          {d.variante.en_oferta && d.variante.precio_oferta ? (
+                            <span className="flex items-center gap-1">
+                              <span className="text-xs text-gray-400 line-through">{formatCRC(d.variante.precio)}</span>
+                              <span className="font-bold text-orange-600">{formatCRC(d.variante.precio_oferta)}</span>
+                            </span>
+                          ) : (
+                            <span className="font-medium text-brand-700">{formatCRC(d.variante.precio)}</span>
+                          )}
                           <Plus className="w-3.5 h-3.5 text-brand-600" />
                         </div>
                       </button>
@@ -569,7 +597,12 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
                     <div key={item.variante_id} className="px-3 py-2 grid grid-cols-12 gap-1 items-center">
                       <div className="col-span-5">
                         <p className="text-xs font-medium text-gray-900 truncate">{item.display}</p>
-                        <p className="text-xs text-gray-400">{item.sku}</p>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <p className="text-xs text-gray-400">{item.sku}</p>
+                          {item.en_oferta && (
+                            <span className="inline-flex px-1 py-0 rounded text-[10px] font-semibold bg-orange-100 text-orange-700">OFERTA</span>
+                          )}
+                        </div>
                       </div>
                       <div className="col-span-2">
                         <input
@@ -603,15 +636,15 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
         {/* Totals + submit */}
         <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-end justify-between gap-4">
           <div className="text-sm space-y-1 min-w-[200px]">
-            {descuentoActual > 0 && (
+            {descuentoMonto > 0 && (
               <>
                 <div className="flex justify-between gap-8 text-gray-500">
                   <span>Subtotal</span>
                   <span>{formatCRC(totals.subtotal)}</span>
                 </div>
                 <div className="flex justify-between gap-8 text-green-600 font-medium">
-                  <span>Descuento</span>
-                  <span>−{formatCRC(descuentoActual)}</span>
+                  <span>Descuento ({descuentoPct}%)</span>
+                  <span>−{formatCRC(descuentoMonto)}</span>
                 </div>
                 <div className="border-t border-gray-200 pt-1" />
               </>

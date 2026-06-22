@@ -80,6 +80,9 @@ export interface VarianteProducto {
   talla: string | null
   color: string | null
   precio: number
+  precio_costo: number
+  en_oferta: boolean
+  precio_oferta: number | null
   activo: boolean
   created_at: string
   updated_at: string

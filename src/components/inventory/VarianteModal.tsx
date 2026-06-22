@@ -10,12 +10,14 @@ import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
 import type { VarianteProducto } from '@/types'
 
-// Single schema covering both create and edit — stock_inicial for new, stock for edit.
 const schema = z.object({
   sku:           z.string().min(1, 'SKU requerido'),
   talla:         z.string().optional(),
   color:         z.string().optional(),
   precio:        z.number({ error: 'Precio requerido' }).min(1, 'Precio debe ser mayor a 0'),
+  precio_costo:  z.number().min(0).default(0),
+  en_oferta:     z.boolean().default(false),
+  precio_oferta: z.number().min(1).nullable().optional(),
   stock_inicial: z.number().min(0).default(0),
   stock:         z.number().min(0, 'Stock debe ser ≥ 0').default(0),
   activo:        z.boolean().default(true),
@@ -36,40 +38,57 @@ export function VarianteModal({ isOpen, onClose, productoId, productoNombre, var
   const { activeTienda } = useAuth()
   const isEditing = !!variante
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema) as never,
-    defaultValues: { sku: '', talla: '', color: '', precio: 0, stock_inicial: 0, stock: 0, activo: true },
+    defaultValues: {
+      sku: '', talla: '', color: '',
+      precio: 0, precio_costo: 0,
+      en_oferta: false, precio_oferta: undefined,
+      stock_inicial: 0, stock: 0, activo: true,
+    },
   })
+
+  const enOferta = watch('en_oferta')
 
   useEffect(() => {
     if (isOpen) {
       reset(isEditing ? {
-        sku:    variante.sku,
-        talla:  variante.talla ?? '',
-        color:  variante.color ?? '',
-        precio: variante.precio,
-        stock:  variante.stock ?? 0,
+        sku:           variante.sku,
+        talla:         variante.talla ?? '',
+        color:         variante.color ?? '',
+        precio:        variante.precio,
+        precio_costo:  variante.precio_costo,
+        en_oferta:     variante.en_oferta,
+        precio_oferta: variante.precio_oferta ?? undefined,
+        stock:         variante.stock ?? 0,
         stock_inicial: 0,
-        activo: variante.activo,
+        activo:        variante.activo,
       } : {
-        sku: '', talla: '', color: '', precio: 0, stock_inicial: 0, stock: 0, activo: true,
+        sku: '', talla: '', color: '',
+        precio: 0, precio_costo: 0,
+        en_oferta: false, precio_oferta: undefined,
+        stock_inicial: 0, stock: 0, activo: true,
       })
     }
   }, [isOpen, variante, isEditing, reset])
 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const payload = {
+        sku:           data.sku,
+        talla:         data.talla || null,
+        color:         data.color || null,
+        precio:        data.precio,
+        precio_costo:  data.precio_costo,
+        en_oferta:     data.en_oferta,
+        precio_oferta: data.en_oferta ? (data.precio_oferta ?? null) : null,
+        activo:        data.activo,
+      }
+
       if (isEditing) {
-        const { error } = await supabase.from('variantes_producto').update({
-          sku:    data.sku,
-          talla:  data.talla || null,
-          color:  data.color || null,
-          precio: data.precio,
-          activo: data.activo,
-        }).eq('id', variante.id)
+        const { error } = await supabase.from('variantes_producto').update(payload).eq('id', variante.id)
         if (error) throw error
 
-        // Update stock in inventario_tienda
         if (activeTienda) {
           const { error: stockErr } = await supabase.from('inventario_tienda').upsert({
             tienda_id:   activeTienda.id,
@@ -79,14 +98,10 @@ export function VarianteModal({ isOpen, onClose, productoId, productoNombre, var
           if (stockErr) throw stockErr
         }
       } else {
-        const { data: newVar, error } = await supabase.from('variantes_producto').insert({
-          producto_id: productoId,
-          sku:    data.sku,
-          talla:  data.talla || null,
-          color:  data.color || null,
-          precio: data.precio,
-          activo: data.activo,
-        }).select('id').single()
+        const { data: newVar, error } = await supabase
+          .from('variantes_producto')
+          .insert({ producto_id: productoId, ...payload })
+          .select('id').single()
         if (error) throw error
 
         if (data.stock_inicial > 0 && activeTienda && newVar) {
@@ -134,24 +149,48 @@ export function VarianteModal({ isOpen, onClose, productoId, productoNombre, var
           </FormField>
         </div>
 
-        <FormField label="Precio de venta (₡)" required error={errors.precio?.message}>
-          <input
-            {...register('precio', { valueAsNumber: true })}
-            type="number"
-            min="1"
-            step="1"
-            className={inputClass(!!errors.precio)}
-            placeholder="35000"
-          />
-        </FormField>
+        <div className="grid grid-cols-2 gap-4">
+          <FormField label="Precio de venta (₡)" required error={errors.precio?.message}>
+            <input
+              {...register('precio', { valueAsNumber: true })}
+              type="number" min="1" step="1"
+              className={inputClass(!!errors.precio)}
+              placeholder="35000"
+            />
+          </FormField>
+          <FormField label="Precio de costo (₡)">
+            <input
+              {...register('precio_costo', { valueAsNumber: true })}
+              type="number" min="0" step="1"
+              className={inputClass()}
+              placeholder="20000"
+            />
+          </FormField>
+        </div>
+
+        {/* Offer section */}
+        <div className="border border-orange-100 rounded-xl p-3 space-y-3 bg-orange-50/40">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input {...register('en_oferta')} type="checkbox" className="rounded border-gray-300 text-orange-500 focus:ring-orange-400" />
+            <span className="text-sm font-medium text-gray-700">En oferta</span>
+          </label>
+          {enOferta && (
+            <FormField label="Precio de oferta (₡)" required error={errors.precio_oferta?.message}>
+              <input
+                {...register('precio_oferta', { valueAsNumber: true })}
+                type="number" min="1" step="1"
+                className={inputClass(!!errors.precio_oferta)}
+                placeholder="28000"
+              />
+            </FormField>
+          )}
+        </div>
 
         {isEditing ? (
           <FormField label={`Stock en ${activeTienda?.nombre ?? 'esta tienda'}`} error={errors.stock?.message}>
             <input
               {...register('stock', { valueAsNumber: true })}
-              type="number"
-              min="0"
-              step="1"
+              type="number" min="0" step="1"
               className={inputClass(!!errors.stock)}
               placeholder="0"
             />
@@ -160,9 +199,7 @@ export function VarianteModal({ isOpen, onClose, productoId, productoNombre, var
           <FormField label={`Stock inicial en ${activeTienda?.nombre ?? 'esta tienda'}`}>
             <input
               {...register('stock_inicial', { valueAsNumber: true })}
-              type="number"
-              min="0"
-              step="1"
+              type="number" min="0" step="1"
               className={inputClass()}
               placeholder="0"
             />
