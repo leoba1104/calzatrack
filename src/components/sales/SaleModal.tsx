@@ -170,6 +170,13 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
 
   const hayOferta = items.some((i) => i.en_oferta)
 
+  // Auto-select and lock the 'ofertas' category when any offer item is in the cart
+  useEffect(() => {
+    if (hayOferta) {
+      setValue('categoria_venta', 'ofertas')
+    }
+  }, [hayOferta, setValue])
+
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, i) => sum + i.cantidad * i.precio_unitario, 0)
     return { subtotal }
@@ -402,22 +409,30 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
                 <div className="grid grid-cols-3 gap-2">
                   {categoriasContado.map((cat) => {
                     const selected = watch('categoria_venta') === cat.slug
+                    const locked   = hayOferta
                     return (
                       <button
                         key={cat.slug}
                         type="button"
-                        onClick={() => setValue('categoria_venta', cat.slug)}
-                        className={`py-2 text-sm font-medium rounded-xl border transition-colors ${
+                        disabled={locked}
+                        onClick={() => !locked && setValue('categoria_venta', cat.slug)}
+                        className={cn(
+                          'py-2 text-sm font-medium rounded-xl border transition-colors',
                           selected
                             ? 'bg-brand-600 text-white border-brand-600'
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400 hover:text-brand-600'
-                        }`}
+                            : locked
+                              ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400 hover:text-brand-600'
+                        )}
                       >
                         {cat.nombre}
                       </button>
                     )
                   })}
                 </div>
+                {hayOferta && (
+                  <p className="mt-1.5 text-xs text-orange-600">Categoría fijada a Ofertas automáticamente</p>
+                )}
               </FormField>
             )}
 
