@@ -1,10 +1,24 @@
+import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { useAuth } from '@/hooks/useAuth'
 
 export function AppLayout() {
+  const { activeTienda } = useAuth()
+
+  useEffect(() => {
+    const el = document.documentElement
+    if (activeTienda?.prefijo) {
+      el.setAttribute('data-theme', activeTienda.prefijo)
+    } else {
+      el.removeAttribute('data-theme')
+    }
+    return () => el.removeAttribute('data-theme')
+  }, [activeTienda?.prefijo])
+
   return (
-    <div className="flex h-screen bg-[#f8f5ff] overflow-hidden">
+    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'rgb(var(--app-bg))' }}>
       <Sidebar />
       <div className="flex flex-col flex-1 overflow-hidden">
         <Header />

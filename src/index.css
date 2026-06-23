@@ -2,6 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Default theme (Admin / purple) ──────────────────────────── */
+:root {
+  /* Brand palette — RGB channels (no rgb() wrapper) so Tailwind
+     opacity modifiers like bg-brand-600/20 work correctly          */
+  --brand-50:  250 245 255;
+  --brand-100: 243 232 255;
+  --brand-200: 233 213 255;
+  --brand-300: 216 180 254;
+  --brand-400: 192 132 252;
+  --brand-500: 168  85 247;
+  --brand-600: 147  51 234;
+  --brand-700: 126  34 206;
+  --brand-800: 107  33 168;
+  --brand-900:  88  28 135;
+
+  --app-bg:     248 245 255;   /* very light purple tint */
+  --sidebar-bg: #160829;
+}
+
+/* ── Calzado Mariana (MAR) — Navy Blue ───────────────────────── */
+[data-theme="MAR"] {
+  --brand-50:  240 246 255;
+  --brand-100: 219 234 254;
+  --brand-200: 184 210 253;
+  --brand-300: 132 175 250;
+  --brand-400:  72 133 246;
+  --brand-500:  29  96 235;
+  --brand-600:  19  79 216;
+  --brand-700:  16  64 185;
+  --brand-800:  15  52 148;
+  --brand-900:  12  40 112;
+
+  --app-bg:     240 246 255;   /* very light blue tint */
+  --sidebar-bg: #071832;
+}
+
+/* ── Dali Store (DAL) — Orange / Coral ───────────────────────── */
+[data-theme="DAL"] {
+  --brand-50:  255 248 240;
+  --brand-100: 255 240 224;
+  --brand-200: 254 215 170;
+  --brand-300: 253 186 116;
+  --brand-400: 251 146  60;
+  --brand-500: 249 115  22;
+  --brand-600: 234  88  12;
+  --brand-700: 194  71  10;
+  --brand-800: 154  58   8;
+  --brand-900: 124  45   7;
+
+  --app-bg:     255 250 245;   /* very light warm/orange tint */
+  --sidebar-bg: #1c1028;
+}
+
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;
@@ -14,7 +67,7 @@
 
   body {
     margin: 0;
-    background-color: #f8f5ff;
+    background-color: rgb(var(--app-bg));
     color: #111827;
   }
 }
@@ -22,6 +75,6 @@
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #d8b4fe transparent;
+    scrollbar-color: rgb(var(--brand-300)) transparent;
   }
 }

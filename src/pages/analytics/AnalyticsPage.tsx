@@ -240,8 +240,8 @@ export function AnalyticsPage() {
   , [ventas, esAnio])
 
   const comprasData = useMemo(() =>
-    groupByTime(compras.map((c) => ({ fecha: c.fecha, total: c.total_pagado })), esAnio)
-  , [compras, esAnio])
+    groupByTime(compras.map((c) => ({ fecha: c.fecha, total: c.total_pagado })), true)
+  , [compras])
 
   const totalCompras = useMemo(() => compras.reduce((s, c) => s + c.total_pagado, 0), [compras])
 
@@ -367,7 +367,7 @@ export function AnalyticsPage() {
       <div className="space-y-4">
         <SectionTitle title="Ventas" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card title={esAnio ? 'Tendencia mensual' : 'Tendencia diaria'} full>
+          <Card title={esAnio ? 'Ventas por mes' : 'Ventas por día'} full>
             {tendenciaData.length === 0 ? (
               <p className="text-center text-sm text-gray-400 py-12">Sin ventas en este período</p>
             ) : (
@@ -426,7 +426,7 @@ export function AnalyticsPage() {
           <KpiMini label="Total invertido"    value={formatCRC(totalCompras)} />
           <KpiMini label="Compras recibidas"  value={compras.length} />
 
-          <Card title={esAnio ? 'Inversión mensual' : 'Inversión diaria'} full>
+          <Card title="Inversión por mes" full>
             {comprasData.length === 0
               ? <p className="text-center text-sm text-gray-400 py-12">Sin compras en este período</p>
               : (
@@ -510,7 +510,7 @@ export function AnalyticsPage() {
 
           {/* Per-employee chart with selector */}
           <Card
-            title={`${esAnio ? 'Ventas mensuales' : 'Ventas diarias'} — ${empleadoActivo || '—'}`}
+            title={`${esAnio ? 'Ventas por mes' : 'Ventas por día'} — ${empleadoActivo || '—'}`}
             full
             action={
               empleados.length > 0 ? (

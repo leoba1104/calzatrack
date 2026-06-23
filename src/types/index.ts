@@ -20,6 +20,7 @@ export interface Tienda {
   telefono: string | null
   prefijo: string
   activo: boolean
+  logo_url: string | null
   created_at: string
 }
 
