@@ -15,11 +15,13 @@ import {
   Tag,
   CreditCard,
   ClipboardList,
+  Printer,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
+import { usePrinter } from '@/hooks/usePrinter'
 import { supabase } from '@/lib/supabase'
 import type { UserRole, Tienda } from '@/types'
 
@@ -47,6 +49,7 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const { profile, activeTienda, isAdmin, setActiveTienda, signOut } = useAuth()
+  const { isConnected, isConnecting, connect, disconnect } = usePrinter()
   const [storeOpen, setStoreOpen] = useState(false)
 
   const { data: tiendas } = useQuery({
@@ -150,6 +153,27 @@ export function Sidebar() {
             )}
           </div>
         )}
+
+        {/* Printer connect */}
+        <button
+          onClick={isConnected ? disconnect : connect}
+          disabled={isConnecting}
+          className={cn(
+            'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-150 disabled:opacity-50',
+            isConnected
+              ? 'text-green-400 hover:text-green-300 hover:bg-white/5'
+              : 'text-brand-400 hover:text-white hover:bg-white/5'
+          )}
+        >
+          <div className="relative shrink-0">
+            <Printer className="w-4 h-4" />
+            <span className={cn(
+              'absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-[var(--sidebar-bg)]',
+              isConnected ? 'bg-green-500' : 'bg-gray-600'
+            )} />
+          </div>
+          {isConnecting ? 'Conectando...' : isConnected ? 'Impresora conectada' : 'Conectar impresora'}
+        </button>
 
         {/* Logout */}
         <button
