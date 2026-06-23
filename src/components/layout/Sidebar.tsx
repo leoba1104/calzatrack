@@ -70,23 +70,21 @@ export function Sidebar() {
     <aside className="w-64 flex flex-col shrink-0" style={{ backgroundColor: 'var(--sidebar-bg)' }}>
 
       {/* Header */}
-      <div className="px-5 pt-6 pb-4">
-        <div className="flex items-center gap-2.5 mb-3">
+      <div className="px-5 pt-6 pb-4 space-y-3">
+        <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center shrink-0">
             <Footprints className="w-4 h-4 text-white" />
           </div>
           <span className="text-[15px] font-bold text-white tracking-tight">CalzaTrack</span>
         </div>
 
-        {/* Store logo */}
+        {/* Store logo — shown below the brand, no card wrapper */}
         {activeTienda?.logo_url && (
-          <div className="flex items-center justify-center px-2 py-2 rounded-xl bg-white/5 border border-white/10">
-            <img
-              src={activeTienda.logo_url}
-              alt={activeTienda.nombre}
-              className="h-10 w-auto object-contain"
-            />
-          </div>
+          <img
+            src={activeTienda.logo_url}
+            alt={activeTienda.nombre}
+            className="h-12 w-auto object-contain drop-shadow-sm"
+          />
         )}
       </div>
 
@@ -115,8 +113,8 @@ export function Sidebar() {
       {/* Bottom section */}
       <div className="p-3 border-t border-white/10 space-y-2">
 
-        {/* Store switcher — dropdown opens upward */}
-        {activeTienda && (
+        {/* Store switcher — only visible to admin */}
+        {isAdmin && activeTienda && (
           <div className="relative">
             <button
               onClick={() => canSwitchStore && setStoreOpen((o) => !o)}
