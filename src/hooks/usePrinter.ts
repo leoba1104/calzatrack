@@ -84,21 +84,16 @@ export function usePrinter() {
   }
 
   async function testPrint(): Promise<void> {
-    const ESC = 0x1B, LF = 0x0A, GS = 0x1D
-    const enc = (s: string) => Array.from(new TextEncoder().encode(s))
-    const bytes = new Uint8Array([
-      ESC, 0x40,                          // init
-      ESC, 0x61, 0x01,                    // center
-      ESC, 0x45, 0x01,                    // bold on
-      ...enc('CalzaTrack'), LF,
-      ESC, 0x45, 0x00,                    // bold off
-      ...enc('Prueba de impresion'), LF,
-      ...enc('------------------------'), LF,
-      ...enc('Si ves esto, funciona!'), LF,
-      LF, LF, LF,
-      GS, 0x56, 0x41, 0x03,              // cut
-    ])
-    await print(bytes)
+    // Minimal raw text with CRLF — no ESC/POS commands to rule out compatibility issues
+    const CRLF = '\r\n'
+    const text = [
+      'CalzaTrack',
+      'Prueba de impresion',
+      '------------------------',
+      'Si ves esto, funciona!',
+      '', '', '',
+    ].join(CRLF)
+    await print(new TextEncoder().encode(text))
   }
 
   return { isConnected, isConnecting, isPrinting, connect, disconnect, print, testPrint }
