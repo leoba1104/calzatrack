@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   format, parse, isValid, isToday, isSameDay, isWithinInterval,
-  startOfMonth, endOfMonth, eachDayOfInterval, isBefore, isAfter,
+  startOfMonth, endOfMonth, eachDayOfInterval, isBefore,
   addMonths, subMonths, getDay,
-  startOfWeek, endOfWeek, startOfDay, endOfDay, subDays,
+  subDays,
   startOfMonth as soM, endOfMonth as eoM,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 
 export interface DateRange {
   from: string | null  // YYYY-MM-DD
-  to:   string | null  // YYYY-MM-DD
+  to: string | null  // YYYY-MM-DD
 }
 
 interface DateRangePickerProps {
@@ -36,26 +36,25 @@ function getPresets(): Preset[] {
   const today = new Date()
   const fmt = (d: Date) => format(d, 'yyyy-MM-dd')
   return [
-    { label: 'Hoy',        range: { from: fmt(today),         to: fmt(today) } },
-    { label: '7 días',     range: { from: fmt(subDays(today, 6)), to: fmt(today) } },
-    { label: '30 días',    range: { from: fmt(subDays(today, 29)), to: fmt(today) } },
-    { label: 'Este mes',   range: { from: fmt(soM(today)),    to: fmt(eoM(today)) } },
+    { label: 'Hoy', range: { from: fmt(today), to: fmt(today) } },
+    { label: '7 días', range: { from: fmt(subDays(today, 6)), to: fmt(today) } },
+    { label: '30 días', range: { from: fmt(subDays(today, 29)), to: fmt(today) } },
+    { label: 'Este mes', range: { from: fmt(soM(today)), to: fmt(eoM(today)) } },
     { label: 'Mes pasado', range: { from: fmt(soM(subMonths(today, 1))), to: fmt(eoM(subMonths(today, 1))) } },
   ]
 }
 
 export function DateRangePicker({ value, onChange, placeholder = 'Filtrar por fecha', className }: DateRangePickerProps) {
-  const [open, setOpen]         = useState(false)
-  const [hovered, setHovered]   = useState<Date | null>(null)
+  const [open, setOpen] = useState(false)
+  const [hovered, setHovered] = useState<Date | null>(null)
   const [viewDate, setViewDate] = useState<Date>(new Date())
   const [selecting, setSelecting] = useState<'from' | 'to'>('from')
   const containerRef = useRef<HTMLDivElement>(null)
 
   const fromDate = parseDate(value.from)
-  const toDate   = parseDate(value.to)
+  const toDate = parseDate(value.to)
 
-  const hasRange = fromDate && toDate
-  const hasFrom  = !!fromDate
+  const hasFrom = !!fromDate
 
   // Label for the trigger button
   const triggerLabel = (() => {
@@ -123,12 +122,12 @@ export function DateRangePicker({ value, onChange, placeholder = 'Filtrar por fe
   }
 
   // Calendar days
-  const days     = eachDayOfInterval({ start: startOfMonth(viewDate), end: endOfMonth(viewDate) })
+  const days = eachDayOfInterval({ start: startOfMonth(viewDate), end: endOfMonth(viewDate) })
   const startPad = (getDay(startOfMonth(viewDate)) + 6) % 7
 
   function getDayState(day: Date) {
     const isFrom = fromDate && isSameDay(day, fromDate)
-    const isTo   = toDate   && isSameDay(day, toDate)
+    const isTo = toDate && isSameDay(day, toDate)
 
     const inRange = (() => {
       if (fromDate && toDate) {
@@ -240,12 +239,12 @@ export function DateRangePicker({ value, onChange, placeholder = 'Filtrar por fe
                     isFrom || isTo
                       ? 'bg-brand-600 text-white font-semibold rounded-lg hover:bg-brand-700'
                       : isHoverEnd
-                      ? 'bg-brand-200 text-brand-800 font-semibold rounded-lg'
-                      : inRange
-                      ? 'bg-brand-50 text-brand-700 rounded-none'
-                      : todayDay
-                      ? 'bg-gray-100 text-gray-900 font-semibold rounded-lg hover:bg-gray-200'
-                      : 'text-gray-700 rounded-lg hover:bg-gray-100',
+                        ? 'bg-brand-200 text-brand-800 font-semibold rounded-lg'
+                        : inRange
+                          ? 'bg-brand-50 text-brand-700 rounded-none'
+                          : todayDay
+                            ? 'bg-gray-100 text-gray-900 font-semibold rounded-lg hover:bg-gray-200'
+                            : 'text-gray-700 rounded-lg hover:bg-gray-100',
                   )}
                 >
                   {format(day, 'd')}
@@ -261,8 +260,8 @@ export function DateRangePicker({ value, onChange, placeholder = 'Filtrar por fe
                 {fromDate && toDate
                   ? `${format(fromDate, 'd MMM', { locale: es })} → ${format(toDate, 'd MMM yyyy', { locale: es })}`
                   : fromDate
-                  ? `Desde ${format(fromDate, "d 'de' MMMM", { locale: es })}`
-                  : ''}
+                    ? `Desde ${format(fromDate, "d 'de' MMMM", { locale: es })}`
+                    : ''}
               </span>
               <button
                 type="button"
