@@ -62,7 +62,7 @@ export function ClientsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Clientes</h1>
-          <p className="text-sm text-gray-500 mt-1">Directorio compartido entre ambas tiendas</p>
+          <p className="text-sm text-gray-500 mt-1">Directorio de clientes</p>
         </div>
         <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors">
           <Plus className="w-4 h-4" />

@@ -115,20 +115,28 @@ async function runImport(rows: ParsedRow[], tiendaId: string): Promise<ImportRes
   const marcaNames = [...new Set(rows.map((r) => r.marca).filter(Boolean))]
   const catNames = [...new Set(rows.map((r) => r.categoria).filter(Boolean))]
 
-  // 2. Upsert marcas
+  // 2. Upsert marcas — insert individually to handle missing unique constraint gracefully
   const marcaMap = new Map<string, string>()
-  if (marcaNames.length) {
-    await supabase.from('marcas').upsert(marcaNames.map((nombre) => ({ nombre })), { onConflict: 'nombre', ignoreDuplicates: true })
-    const { data } = await supabase.from('marcas').select('id, nombre').in('nombre', marcaNames)
-    data?.forEach((m) => marcaMap.set(m.nombre, m.id))
+  for (const nombre of marcaNames) {
+    const { data: existing } = await supabase.from('marcas').select('id').eq('nombre', nombre).maybeSingle()
+    if (existing) {
+      marcaMap.set(nombre, existing.id)
+    } else {
+      const { data: newM } = await supabase.from('marcas').insert({ nombre }).select('id').single()
+      if (newM) marcaMap.set(nombre, newM.id)
+    }
   }
 
-  // 3. Upsert categorias
+  // 3. Upsert categorias — same approach
   const catMap = new Map<string, string>()
-  if (catNames.length) {
-    await supabase.from('categorias').upsert(catNames.map((nombre) => ({ nombre })), { onConflict: 'nombre', ignoreDuplicates: true })
-    const { data } = await supabase.from('categorias').select('id, nombre').in('nombre', catNames)
-    data?.forEach((c) => catMap.set(c.nombre, c.id))
+  for (const nombre of catNames) {
+    const { data: existing } = await supabase.from('categorias').select('id').eq('nombre', nombre).maybeSingle()
+    if (existing) {
+      catMap.set(nombre, existing.id)
+    } else {
+      const { data: newC } = await supabase.from('categorias').insert({ nombre }).select('id').single()
+      if (newC) catMap.set(nombre, newC.id)
+    }
   }
 
   // 4. Group rows by product name
@@ -144,16 +152,16 @@ async function runImport(rows: ParsedRow[], tiendaId: string): Promise<ImportRes
     const marca_id = first.marca ? (marcaMap.get(first.marca) ?? null) : null
     const categoria_id = first.categoria ? (catMap.get(first.categoria) ?? null) : null
 
-    // Find or create producto
+    // Find or create producto — scoped to this store
     let productoId: string
-    const { data: existing } = await supabase.from('productos').select('id').eq('nombre', nombre).maybeSingle()
+    const { data: existing } = await supabase.from('productos').select('id').eq('nombre', nombre).eq('tienda_id', tiendaId).maybeSingle()
 
     if (existing) {
       productoId = existing.id
     } else {
       const { data: newP, error } = await supabase
         .from('productos')
-        .insert({ nombre, descripcion: first.descripcion || null, marca_id, categoria_id, precio_base: first.precio_base, activo: true })
+        .insert({ nombre, descripcion: first.descripcion || null, marca_id, categoria_id, precio_base: first.precio_base, activo: true, tienda_id: tiendaId })
         .select('id')
         .single()
       if (error || !newP) {

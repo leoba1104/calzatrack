@@ -86,7 +86,7 @@ export function CreditsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Créditos</h1>
-        <p className="text-sm text-gray-500 mt-1">Ventas a crédito — {activeTienda?.nombre}</p>
+        <p className="text-sm text-gray-500 mt-1">Ventas a crédito</p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

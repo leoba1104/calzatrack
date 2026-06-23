@@ -267,7 +267,7 @@ export function InventoryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Inventario</h1>
-          <p className="text-sm text-gray-500 mt-1">{activeTienda?.nombre}</p>
+          <p className="text-sm text-gray-500 mt-1">Productos y variantes</p>
         </div>
         {canManage && (
           <div className="flex items-center gap-2">
