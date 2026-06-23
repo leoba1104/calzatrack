@@ -517,26 +517,28 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
               </div>
             )}
 
-            <FormField label="Descuento (%)">
-              <div className="relative">
-                <input
-                  {...register('descuento', { valueAsNumber: true })}
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  disabled={hayOferta}
-                  className={cn(inputClass(), hayOferta && 'opacity-40 cursor-not-allowed bg-gray-50')}
-                  placeholder="0"
-                />
-                {hayOferta && (
-                  <p className="mt-1 text-xs text-orange-600">Sin descuento adicional en items de oferta</p>
-                )}
-                {!hayOferta && descuentoPct > 0 && (
-                  <p className="mt-1 text-xs text-gray-400">= {formatCRC(descuentoMonto)} de descuento</p>
-                )}
-              </div>
-            </FormField>
+            {tipoActual === 'contado' && (
+              <FormField label="Descuento (%)">
+                <div className="relative">
+                  <input
+                    {...register('descuento', { valueAsNumber: true })}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    disabled={hayOferta}
+                    className={cn(inputClass(), hayOferta && 'opacity-40 cursor-not-allowed bg-gray-50')}
+                    placeholder="0"
+                  />
+                  {hayOferta && (
+                    <p className="mt-1 text-xs text-orange-600">Sin descuento adicional en items de oferta</p>
+                  )}
+                  {!hayOferta && descuentoPct > 0 && (
+                    <p className="mt-1 text-xs text-gray-400">= {formatCRC(descuentoMonto)} de descuento</p>
+                  )}
+                </div>
+              </FormField>
+            )}
 
           </div>
 

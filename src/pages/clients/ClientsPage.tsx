@@ -10,7 +10,7 @@ import type { Cliente } from '@/types'
 
 export function ClientsPage() {
   const qc = useQueryClient()
-  const { activeTienda } = useAuth()
+  const { activeTienda, canManage } = useAuth()
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Cliente | null>(null)
@@ -136,9 +136,11 @@ export function ClientsPage() {
                         <button onClick={() => openEdit(c)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button onClick={() => setDeleting(c)} className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors">
-                          <Trash className="w-4 h-4" />
-                        </button>
+                        {canManage && (
+                          <button onClick={() => setDeleting(c)} className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors">
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
