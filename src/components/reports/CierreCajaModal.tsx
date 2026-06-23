@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Calculator, CheckCircle2 } from 'lucide-react'
+import { Loader2, CheckCircle2 } from 'lucide-react'
 import { format, startOfDay, endOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -361,22 +361,6 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
               </div>
             )}
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-gray-50 rounded-xl p-3 text-center">
-                <p className="text-xl font-bold text-gray-900">{preview.pares_vendidos}</p>
-                <p className="text-xs text-gray-500 mt-0.5">Pares</p>
-              </div>
-              <div className="bg-orange-50 rounded-xl p-3 text-center">
-                <p className="text-xl font-bold text-orange-700">{preview.apartados_abiertos}</p>
-                <p className="text-xs text-orange-500 mt-0.5">Apartados</p>
-              </div>
-              <div className="bg-blue-50 rounded-xl p-3 text-center">
-                <p className="text-xl font-bold text-blue-700">{preview.creditos_abiertos}</p>
-                <p className="text-xs text-blue-500 mt-0.5">Créditos</p>
-              </div>
-            </div>
-
             {/* Notes */}
             <FormField label="Notas (opcional)">
               <Textarea
@@ -389,14 +373,6 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
 
             {/* Actions */}
             <div className="flex gap-2">
-              <button
-                onClick={calcular}
-                disabled={loading}
-                className="flex items-center gap-1.5 px-3 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-60 transition-colors"
-              >
-                <Calculator className="w-3.5 h-3.5" />
-                Recalcular
-              </button>
               <button
                 onClick={() => saveMutation.mutate()}
                 disabled={saveMutation.isPending}

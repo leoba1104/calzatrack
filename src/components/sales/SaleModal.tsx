@@ -470,9 +470,6 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
                     )
                   })}
                 </div>
-                {hayOferta && (
-                  <p className="mt-1.5 text-xs text-orange-600">Categoría fijada a Ofertas automáticamente</p>
-                )}
               </FormField>
             )}
 
@@ -553,7 +550,7 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
               </div>
             )}
 
-            {tipoActual === 'contado' && (
+            {tipoActual === 'contado' && !hayOferta && (
               <FormField label="Descuento (%)">
                 <div className="relative">
                   <input
@@ -562,14 +559,10 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
                     min="0"
                     max="100"
                     step="1"
-                    disabled={hayOferta}
-                    className={cn(inputClass(), hayOferta && 'opacity-40 cursor-not-allowed bg-gray-50')}
+                    className={inputClass()}
                     placeholder="0"
                   />
-                  {hayOferta && (
-                    <p className="mt-1 text-xs text-orange-600">Sin descuento adicional en items de oferta</p>
-                  )}
-                  {!hayOferta && descuentoPct > 0 && (
+                  {descuentoPct > 0 && (
                     <p className="mt-1 text-xs text-gray-400">= {formatCRC(descuentoMonto)} de descuento</p>
                   )}
                 </div>
