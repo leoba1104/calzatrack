@@ -70,21 +70,25 @@ export function Sidebar() {
     <aside className="w-64 flex flex-col shrink-0" style={{ backgroundColor: 'var(--sidebar-bg)' }}>
 
       {/* Header */}
-      <div className="px-5 pt-6 pb-4">
-        <div className="flex items-center gap-2.5">
-          {activeTienda?.logo_url ? (
+      <div className="px-4 pt-5 pb-3">
+        {/* Brand label */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-6 h-6 bg-brand-600 rounded-lg flex items-center justify-center shrink-0">
+            <Footprints className="w-3 h-3 text-white" />
+          </div>
+          <span className="text-[11px] font-bold text-white/40 tracking-widest uppercase">CalzaTrack</span>
+        </div>
+
+        {/* Store logo in white card — keeps both logos visible regardless of their bg */}
+        {activeTienda?.logo_url && (
+          <div className="bg-white rounded-2xl px-4 py-3 flex items-center justify-center">
             <img
               src={activeTienda.logo_url}
               alt={activeTienda.nombre}
-              className="h-8 w-8 rounded-xl object-cover shrink-0"
+              className="h-14 w-auto object-contain max-w-full"
             />
-          ) : (
-            <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center shrink-0">
-              <Footprints className="w-4 h-4 text-white" />
-            </div>
-          )}
-          <span className="text-[15px] font-bold text-white tracking-tight">CalzaTrack</span>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Nav */}
