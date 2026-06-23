@@ -6,7 +6,6 @@ import {
   FileText,
   Users,
   BarChart3,
-  Footprints,
   UserCog,
   LogOut,
   ChevronUp,
