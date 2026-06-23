@@ -23,7 +23,6 @@ const headerSchema = z.object({
   metodo_pago:       z.string().optional(),
   descuento:         z.number().min(0).max(100).default(0),
   abono_inicial:     z.number().min(0).default(0),
-  notas:             z.string().optional(),
   // Contact fields — required for apartados (stored directly on the venta)
   contacto_nombre:   z.string().optional(),
   contacto_apellido: z.string().optional(),
@@ -274,7 +273,7 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
           tipo:              data.tipo,
           categoria_venta:   data.tipo === 'contado' ? (data.categoria_venta || null) : null,
           estado:            'pendiente',
-          notas:             data.notas || null,
+          notas:             null,
           contacto_nombre:   data.contacto_nombre?.trim() || null,
           contacto_apellido: data.contacto_apellido?.trim() || null,
           contacto_telefono: data.contacto_telefono?.trim() || null,
@@ -367,12 +366,12 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
   const grandTotal     = Math.max(0, totals.subtotal - descuentoMonto)
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Nueva venta" size="xl">
-      <form noValidate onSubmit={handleSubmit((d) => mutation.mutate(d as HeaderData))}>
-        <div className="p-6 grid grid-cols-2 gap-6">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Nueva venta" size="xl" scrollContent={false}>
+      <form noValidate onSubmit={handleSubmit((d) => mutation.mutate(d as HeaderData))} className="flex flex-col flex-1 min-h-0">
+        <div className="flex-1 overflow-hidden min-h-0 p-6 grid grid-cols-2 gap-6">
 
-          {/* Left column */}
-          <div className="space-y-4">
+          {/* Left column — independently scrollable */}
+          <div className="overflow-y-auto pr-2 space-y-4">
             <FormField label="Cliente (opcional)">
               <select {...register('cliente_id')} className={inputClass()}>
                 <option value="">Cliente general</option>
@@ -539,19 +538,11 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
               </div>
             </FormField>
 
-            <FormField label="Notas">
-              <textarea
-                {...register('notas')}
-                rows={3}
-                className={inputClass()}
-                placeholder="Observaciones de la venta..."
-              />
-            </FormField>
           </div>
 
-          {/* Right column */}
-          <div className="space-y-4">
-            <div>
+          {/* Right column — flex column, items list fills remaining height */}
+          <div className="flex flex-col min-h-0 gap-4">
+            <div className="shrink-0">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Agregar producto <span className="text-red-500">*</span>
               </label>
@@ -596,9 +587,9 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
               </div>
             </div>
 
-            {/* Line items */}
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="bg-gray-50 px-3 py-2 grid grid-cols-12 gap-1 text-xs font-medium text-gray-500">
+            {/* Line items — fills all remaining vertical space */}
+            <div className="flex flex-col flex-1 min-h-0 border border-gray-200 rounded-lg overflow-hidden">
+              <div className="shrink-0 bg-gray-50 px-3 py-2 grid grid-cols-12 gap-1 text-xs font-medium text-gray-500 border-b border-gray-200">
                 <span className="col-span-5">Producto</span>
                 <span className="col-span-2 text-center">Cant.</span>
                 <span className="col-span-3 text-right">Precio</span>
@@ -607,12 +598,12 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
               </div>
 
               {items.length === 0 ? (
-                <div className="py-8 text-center text-gray-400">
-                  <ShoppingCart className="w-8 h-8 mx-auto mb-1 text-gray-300" />
+                <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                  <ShoppingCart className="w-8 h-8 mb-1 text-gray-300" />
                   <p className="text-xs">Sin productos</p>
                 </div>
               ) : (
-                <div className="divide-y divide-gray-100 max-h-52 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
                   {items.map((item, idx) => (
                     <div key={item.variante_id} className="px-3 py-2 grid grid-cols-12 gap-1 items-center">
                       <div className="col-span-5">
@@ -653,8 +644,8 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
           </div>
         </div>
 
-        {/* Totals + submit */}
-        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-end justify-between gap-4">
+        {/* Totals + submit — always pinned at bottom */}
+        <div className="shrink-0 px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-end justify-between gap-4">
           <div className="text-sm space-y-1 min-w-[200px]">
             {descuentoMonto > 0 && (
               <>

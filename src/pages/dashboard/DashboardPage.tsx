@@ -47,7 +47,8 @@ function KpiCard({ label, value, sub, icon: Icon, iconColor, iconBg }: KpiCardPr
 export function DashboardPage() {
   const { activeTienda, user, isEmployee } = useAuth()
   const qc = useQueryClient()
-  const [periodo, setPeriodo] = useState<Periodo>(isEmployee ? 'hoy' : 'mes')
+  const [periodo, setPeriodo] = useState<Periodo>('mes')
+  const effectivePeriodo: Periodo = isEmployee ? 'hoy' : periodo
   const [newNota, setNewNota] = useState('')
   const [addingNota, setAddingNota] = useState(false)
   const newNotaRef = useRef<HTMLTextAreaElement>(null)
@@ -115,10 +116,10 @@ export function DashboardPage() {
     addMutation.mutate({ contenido: text, color: newColor })
   }
 
-  const range = periodoRange(periodo)
+  const range = periodoRange(effectivePeriodo)
 
   const { data: ventasData, isLoading: loadingVentas } = useQuery({
-    queryKey: ['dashboard-ventas', activeTienda?.id, periodo],
+    queryKey: ['dashboard-ventas', activeTienda?.id, effectivePeriodo],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ventas')
@@ -204,7 +205,7 @@ export function DashboardPage() {
   const totalPares      = inventarioData?.reduce((s, i) => s + i.stock, 0) ?? 0
   const valorInventario = inventarioData?.reduce((s, i) => s + i.stock * i.variante.precio, 0) ?? 0
 
-  const periodoLabel = { hoy: 'hoy', mes: 'este mes', año: 'este año' }[periodo]
+  const periodoLabel = { hoy: 'hoy', mes: 'este mes', año: 'este año' }[effectivePeriodo]
 
   const alertas = [
     ...vencidos.map((a) => ({ ...a, tipo: 'vencido' as const })),
@@ -228,7 +229,7 @@ export function DashboardPage() {
                 onClick={() => setPeriodo(p)}
                 className={cn(
                   'px-4 py-1.5 text-sm font-medium rounded-lg transition-all capitalize',
-                  periodo === p
+                  effectivePeriodo === p
                     ? 'bg-white text-brand-700 shadow-sm'
                     : 'text-gray-500 hover:text-gray-700'
                 )}

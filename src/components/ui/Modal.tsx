@@ -9,9 +9,11 @@ interface ModalProps {
   title: string
   children: React.ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl'
+  /** When false, children manage their own overflow (for split-panel layouts). Default: true */
+  scrollContent?: boolean
 }
 
-export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, size = 'md', scrollContent = true }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -46,7 +48,9 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="overflow-y-auto flex-1">{children}</div>
+        <div className={scrollContent ? 'overflow-y-auto flex-1' : 'flex-1 overflow-hidden flex flex-col min-h-0'}>
+          {children}
+        </div>
       </div>
     </div>,
     document.body
