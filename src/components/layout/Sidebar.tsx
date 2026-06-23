@@ -75,6 +75,7 @@ export function Sidebar() {
             src={activeTienda.logo_url}
             alt={activeTienda.nombre}
             className="h-24 w-auto object-contain"
+            style={{ filter: 'var(--logo-filter)' }}
           />
         )}
         <span className="text-xl font-bold text-white tracking-tight">CalzaTrack</span>
