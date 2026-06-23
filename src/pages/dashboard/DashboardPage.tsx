@@ -45,9 +45,9 @@ function KpiCard({ label, value, sub, icon: Icon, iconColor, iconBg }: KpiCardPr
 }
 
 export function DashboardPage() {
-  const { activeTienda, user } = useAuth()
+  const { activeTienda, user, isEmployee } = useAuth()
   const qc = useQueryClient()
-  const [periodo, setPeriodo] = useState<Periodo>('mes')
+  const [periodo, setPeriodo] = useState<Periodo>(isEmployee ? 'hoy' : 'mes')
   const [newNota, setNewNota] = useState('')
   const [addingNota, setAddingNota] = useState(false)
   const newNotaRef = useRef<HTMLTextAreaElement>(null)
@@ -220,22 +220,24 @@ export function DashboardPage() {
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">{activeTienda?.nombre ?? 'CalzaTrack'}</p>
         </div>
-        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl">
-          {(['hoy', 'mes', 'año'] as Periodo[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriodo(p)}
-              className={cn(
-                'px-4 py-1.5 text-sm font-medium rounded-lg transition-all capitalize',
-                periodo === p
-                  ? 'bg-white text-brand-700 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              )}
-            >
-              {p === 'hoy' ? 'Hoy' : p === 'mes' ? 'Mes' : 'Año'}
-            </button>
-          ))}
-        </div>
+        {!isEmployee && (
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl">
+            {(['hoy', 'mes', 'año'] as Periodo[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriodo(p)}
+                className={cn(
+                  'px-4 py-1.5 text-sm font-medium rounded-lg transition-all capitalize',
+                  periodo === p
+                    ? 'bg-white text-brand-700 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                )}
+              >
+                {p === 'hoy' ? 'Hoy' : p === 'mes' ? 'Mes' : 'Año'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* KPI cards */}
@@ -341,24 +343,26 @@ export function DashboardPage() {
           )}
         </div>
 
-        {/* Valor del inventario */}
-        <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-col">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center shrink-0">
-              <Wallet className="w-4 h-4 text-green-600" />
+        {/* Valor del inventario — oculto para vendedores */}
+        {!isEmployee && (
+          <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-col">
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center shrink-0">
+                <Wallet className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Valor del inventario</p>
+                <p className="text-xs text-gray-400">Al precio de venta actual</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-800">Valor del inventario</p>
-              <p className="text-xs text-gray-400">Al precio de venta actual</p>
-            </div>
+            <p className="text-3xl font-bold text-gray-900 mt-1">
+              {loadingInventario ? '…' : formatCRC(valorInventario)}
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              {totalPares.toLocaleString('es-CR')} pares
+            </p>
           </div>
-          <p className="text-3xl font-bold text-gray-900 mt-1">
-            {loadingInventario ? '…' : formatCRC(valorInventario)}
-          </p>
-          <p className="text-sm text-gray-500 mt-2">
-            {totalPares.toLocaleString('es-CR')} pares · {activeTienda?.nombre ?? 'la tienda'}
-          </p>
-        </div>
+        )}
 
       </div>
 

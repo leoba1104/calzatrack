@@ -133,13 +133,15 @@ function CierreDetailModal({ cierre, onClose }: { cierre: CierreCaja; onClose: (
 }
 
 export function ReportsPage() {
-  const { activeTienda, isAdmin } = useAuth()
+  const { activeTienda, isAdmin, isEmployee } = useAuth()
 
   const [dateRange, setDateRange]       = useState<DateRange>({ from: null, to: null })
   const [detailCierre, setDetailCierre] = useState<CierreCaja | null>(null)
 
+  const today = format(new Date(), 'yyyy-MM-dd')
+
   const { data: cierres = [], isLoading } = useQuery({
-    queryKey: ['cierres', activeTienda?.id],
+    queryKey: ['cierres', activeTienda?.id, isEmployee],
     queryFn: async () => {
       let q = supabase
         .from('cierres_caja')
@@ -150,6 +152,11 @@ export function ReportsPage() {
 
       if (!isAdmin && activeTienda) {
         q = q.eq('tienda_id', activeTienda.id)
+      }
+
+      // Employees only see today's reports
+      if (isEmployee) {
+        q = q.eq('fecha', today)
       }
 
       const { data, error } = await q
@@ -193,14 +200,16 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-2">
-        <DateRangePicker
-          value={dateRange}
-          onChange={setDateRange}
-          placeholder="Filtrar por fecha o rango"
-        />
-      </div>
+      {/* Filters — hidden for employees (they only see today) */}
+      {!isEmployee && (
+        <div className="flex items-center gap-2">
+          <DateRangePicker
+            value={dateRange}
+            onChange={setDateRange}
+            placeholder="Filtrar por fecha o rango"
+          />
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
