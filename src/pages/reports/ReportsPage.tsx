@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ClipboardList, Eye, Search } from 'lucide-react'
 import { useCategoriasContado, CIERRE_COLOR_MAP } from '@/hooks/useCategoriasContado'
-import { format } from 'date-fns'
+import { format, parse, isValid, isWithinInterval, startOfDay, endOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCRC, cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
+import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker'
 import type { CierreCaja } from '@/types'
 
 const METODO_LABELS: Record<string, string> = {
@@ -106,22 +107,6 @@ function CierreDetailModal({ cierre, onClose }: { cierre: CierreCaja; onClose: (
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-2">
-          <div className="bg-gray-50 rounded-xl p-3 text-center">
-            <p className="text-xl font-bold text-gray-900">{cierre.pares_vendidos}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Pares</p>
-          </div>
-          <div className="bg-orange-50 rounded-xl p-3 text-center">
-            <p className="text-xl font-bold text-orange-700">{cierre.apartados_abiertos}</p>
-            <p className="text-xs text-orange-500 mt-0.5">Apartados</p>
-          </div>
-          <div className="bg-blue-50 rounded-xl p-3 text-center">
-            <p className="text-xl font-bold text-blue-700">{cierre.creditos_abiertos}</p>
-            <p className="text-xs text-blue-500 mt-0.5">Créditos</p>
-          </div>
-        </div>
-
         {/* By employee */}
         {(cierre.breakdown_empleados ?? []).length > 0 && (
           <div>
@@ -150,9 +135,9 @@ function CierreDetailModal({ cierre, onClose }: { cierre: CierreCaja; onClose: (
 export function ReportsPage() {
   const { activeTienda, isAdmin } = useAuth()
 
-  const [search, setSearch]           = useState('')
-  const [selectedMonth, setSelectedMonth] = useState('')
-  const [detailCierre, setDetailCierre]   = useState<CierreCaja | null>(null)
+  const [search, setSearch]             = useState('')
+  const [dateRange, setDateRange]       = useState<DateRange>({ from: null, to: null })
+  const [detailCierre, setDetailCierre] = useState<CierreCaja | null>(null)
 
   const { data: cierres = [], isLoading } = useQuery({
     queryKey: ['cierres', activeTienda?.id],
@@ -175,18 +160,21 @@ export function ReportsPage() {
     enabled: !!activeTienda || isAdmin,
   })
 
-  // Available months for the filter dropdown
-  const months = [...new Set(
-    cierres.map((c) => format(new Date(c.fecha + 'T12:00:00'), 'yyyy-MM'))
-  )].sort((a, b) => b.localeCompare(a))
-
   // Apply filters
+  const rangeFrom = dateRange.from ? parse(dateRange.from, 'yyyy-MM-dd', new Date()) : null
+  const rangeTo   = dateRange.to   ? parse(dateRange.to,   'yyyy-MM-dd', new Date()) : null
+
   const filtered = cierres.filter((c) => {
-    if (selectedMonth && !c.fecha.startsWith(selectedMonth)) return false
+    if (rangeFrom && isValid(rangeFrom)) {
+      const cDate = new Date(c.fecha + 'T12:00:00')
+      const lo    = startOfDay(rangeFrom)
+      const hi    = rangeTo && isValid(rangeTo) ? endOfDay(rangeTo) : endOfDay(rangeFrom)
+      if (!isWithinInterval(cDate, { start: lo, end: hi })) return false
+    }
     if (search) {
-      const hora = format(new Date(c.created_at), 'HH:mm')
+      const hora     = format(new Date(c.created_at), 'HH:mm')
       const fechaStr = format(new Date(c.fecha + 'T12:00:00'), "d 'de' MMMM", { locale: es }).toLowerCase()
-      const q = search.toLowerCase()
+      const q        = search.toLowerCase()
       if (!fechaStr.includes(q) && !hora.includes(q) && !(c.notas ?? '').toLowerCase().includes(q)) return false
     }
     return true
@@ -223,18 +211,11 @@ export function ReportsPage() {
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
           />
         </div>
-        <select
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(e.target.value)}
-          className="text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-gray-600 bg-white"
-        >
-          <option value="">Todos los meses</option>
-          {months.map((m) => (
-            <option key={m} value={m}>
-              {format(new Date(m + '-15'), 'MMMM yyyy', { locale: es })}
-            </option>
-          ))}
-        </select>
+        <DateRangePicker
+          value={dateRange}
+          onChange={setDateRange}
+          placeholder="Filtrar por fecha o rango"
+        />
       </div>
 
       {/* Table */}

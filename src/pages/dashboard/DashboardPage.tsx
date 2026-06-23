@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { TrendingUp, ShoppingBag, Tag, Package, AlertTriangle, Wallet, StickyNote, Plus, X } from 'lucide-react'
+import { TrendingUp, ShoppingBag, Tag, Package, AlertTriangle, Wallet, StickyNote, Plus, X, BadgePercent } from 'lucide-react'
 import {
   startOfDay, endOfDay,
   startOfMonth, endOfMonth,
@@ -158,6 +158,21 @@ export function DashboardPage() {
     enabled: !!activeTienda,
   })
 
+  const { data: ofertasCount, isLoading: loadingOfertas } = useQuery({
+    queryKey: ['dashboard-ofertas', activeTienda?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inventario_tienda')
+        .select('variante:variantes_producto!inner(en_oferta)')
+        .eq('tienda_id', activeTienda!.id)
+        .gt('stock', 0)
+        .eq('variantes_producto.en_oferta', true)
+      if (error) throw error
+      return (data ?? []).length
+    },
+    enabled: !!activeTienda,
+  })
+
   const { data: inventarioData, isLoading: loadingInventario } = useQuery({
     queryKey: ['dashboard-inventario', activeTienda?.id],
     queryFn: async () => {
@@ -224,7 +239,7 @@ export function DashboardPage() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard
           label={`Ventas — ${periodoLabel}`}
           value={loadingVentas ? '…' : formatCRC(totalVentas)}
@@ -255,6 +270,14 @@ export function DashboardPage() {
           icon={Package}
           iconColor="text-green-600"
           iconBg="bg-green-50"
+        />
+        <KpiCard
+          label="En oferta"
+          value={loadingOfertas ? '…' : (ofertasCount ?? 0)}
+          sub={(ofertasCount ?? 0) === 1 ? '1 variante en oferta' : `${ofertasCount ?? 0} variantes en oferta`}
+          icon={BadgePercent}
+          iconColor="text-orange-600"
+          iconBg="bg-orange-50"
         />
       </div>
 
