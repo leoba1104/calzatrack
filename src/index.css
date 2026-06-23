@@ -52,7 +52,7 @@
   --brand-900:  96  30   4;
 
   --app-bg:     255 250 245;   /* very light warm/orange tint */
-  --sidebar-bg: #7C3410;       /* terracota ámbar — contrasta con el fondo oscuro del logo Dali */
+  --sidebar-bg: #1C1000;       /* casi negro con tinte cálido ámbar */
 }
 
 @layer base {
