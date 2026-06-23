@@ -37,15 +37,15 @@ export function usePrinter() {
     setConnecting(true)
     try {
       const port = await navigator.serial.requestPort()
-      await port.open({ baudRate: 9600 })
+      await port.open({ baudRate: 115200 })
       _port = port
       setConnected(true)
       toast.success('Impresora conectada')
     } catch (e) {
-      // NotFoundError = user cancelled the picker — not an error worth reporting
-      if ((e as DOMException).name !== 'NotFoundError') {
-        toast.error('No se pudo conectar a la impresora')
-      }
+      const err = e as DOMException
+      if (err.name === 'NotFoundError') return // user cancelled picker
+      console.error('[Printer] connect error:', err.name, err.message)
+      toast.error(`Error al conectar: ${err.message || err.name}`)
     } finally {
       setConnecting(false)
     }
@@ -80,5 +80,23 @@ export function usePrinter() {
     }
   }
 
-  return { isConnected, isConnecting, isPrinting, connect, disconnect, print }
+  async function testPrint(): Promise<void> {
+    const ESC = 0x1B, LF = 0x0A, GS = 0x1D
+    const enc = (s: string) => Array.from(new TextEncoder().encode(s))
+    const bytes = new Uint8Array([
+      ESC, 0x40,                          // init
+      ESC, 0x61, 0x01,                    // center
+      ESC, 0x45, 0x01,                    // bold on
+      ...enc('CalzaTrack'), LF,
+      ESC, 0x45, 0x00,                    // bold off
+      ...enc('Prueba de impresion'), LF,
+      ...enc('------------------------'), LF,
+      ...enc('Si ves esto, funciona!'), LF,
+      LF, LF, LF,
+      GS, 0x56, 0x41, 0x03,              // cut
+    ])
+    await print(bytes)
+  }
+
+  return { isConnected, isConnecting, isPrinting, connect, disconnect, print, testPrint }
 }

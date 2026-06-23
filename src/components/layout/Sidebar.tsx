@@ -49,7 +49,7 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const { profile, activeTienda, isAdmin, setActiveTienda, signOut } = useAuth()
-  const { isConnected, isConnecting, connect, disconnect } = usePrinter()
+  const { isConnected, isConnecting, connect, disconnect, testPrint } = usePrinter()
   const [storeOpen, setStoreOpen] = useState(false)
 
   const { data: tiendas } = useQuery({
@@ -174,6 +174,17 @@ export function Sidebar() {
           </div>
           {isConnecting ? 'Conectando...' : isConnected ? 'Impresora conectada' : 'Conectar impresora'}
         </button>
+
+        {/* Test print — only visible when connected */}
+        {isConnected && (
+          <button
+            onClick={testPrint}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-brand-400 hover:text-white hover:bg-white/5 transition-all duration-150"
+          >
+            <Printer className="w-4 h-4 opacity-50" />
+            Imprimir prueba
+          </button>
+        )}
 
         {/* Logout */}
         <button
