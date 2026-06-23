@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
 import type { Producto, Marca, Categoria } from '@/types'
@@ -28,6 +29,7 @@ interface ProductModalProps {
 
 export function ProductModal({ isOpen, onClose, producto }: ProductModalProps) {
   const qc = useQueryClient()
+  const { activeTienda } = useAuth()
   const isEditing = !!producto
 
   const { data: marcas } = useQuery({
@@ -81,7 +83,7 @@ export function ProductModal({ isOpen, onClose, producto }: ProductModalProps) {
         const { error } = await supabase.from('productos').update(payload).eq('id', producto.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('productos').insert(payload)
+        const { error } = await supabase.from('productos').insert({ ...payload, tienda_id: activeTienda!.id })
         if (error) throw error
       }
     },

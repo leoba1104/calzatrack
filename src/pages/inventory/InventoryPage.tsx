@@ -52,41 +52,37 @@ export function InventoryPage() {
   const { data: inventario, isLoading } = useQuery({
     queryKey: ['inventario', activeTienda?.id],
     queryFn: async () => {
-      const [productosRes, variantesRes, stockRes] = await Promise.all([
-        supabase
-          .from('productos')
-          .select('id, nombre, descripcion, activo, precio_base, categoria_id, marca_id, created_at, updated_at, marca:marcas(id, nombre), categoria:categorias(id, nombre)')
-          .order('nombre'),
-        supabase
-          .from('variantes_producto')
-          .select('id, producto_id, sku, talla, color, precio, precio_costo, en_oferta, precio_oferta, activo, created_at, updated_at')
-          .order('talla'),
-        supabase
-          .from('inventario_tienda')
-          .select('variante_id, stock')
-          .eq('tienda_id', activeTienda!.id),
-      ])
+      // Start from inventario_tienda so we only see variants that exist in this store
+      const { data: rows } = await supabase
+        .from('inventario_tienda')
+        .select(`
+          variante_id, stock,
+          variante:variantes_producto!inner(
+            id, producto_id, sku, talla, color, precio, precio_costo, en_oferta, precio_oferta, activo, created_at, updated_at,
+            producto:productos!inner(
+              id, nombre, descripcion, activo, precio_base, categoria_id, marca_id, created_at, updated_at,
+              marca:marcas(id, nombre),
+              categoria:categorias(id, nombre)
+            )
+          )
+        `)
+        .eq('tienda_id', activeTienda!.id)
 
-      const stockMap = new Map<string, number>(
-        (stockRes.data ?? []).map((s) => [s.variante_id, s.stock])
-      )
-
-      const variantesByProducto = new Map<string, VarianteConStock[]>()
-      for (const v of variantesRes.data ?? []) {
-        const stock = stockMap.get(v.id) ?? 0
-        const vConStock: VarianteConStock = { ...v, stock }
-        if (!variantesByProducto.has(v.producto_id)) variantesByProducto.set(v.producto_id, [])
-        variantesByProducto.get(v.producto_id)!.push(vConStock)
+      // Group by producto
+      const productoMap = new Map<string, ProductoConVariantes>()
+      for (const row of rows ?? []) {
+        const v = row.variante as unknown as VarianteProducto & { producto: ProductoConVariantes }
+        const p = v.producto
+        if (!productoMap.has(p.id)) {
+          productoMap.set(p.id, { ...p, variantes: [], totalStock: 0 })
+        }
+        const entry = productoMap.get(p.id)!
+        const vConStock: VarianteConStock = { ...(v as unknown as VarianteProducto), stock: row.stock }
+        entry.variantes.push(vConStock)
+        entry.totalStock += row.stock
       }
 
-      return (productosRes.data ?? []).map((p) => {
-        const variantes = variantesByProducto.get(p.id) ?? []
-        return {
-          ...p,
-          variantes,
-          totalStock: variantes.reduce((sum, v) => sum + v.stock, 0),
-        } as unknown as ProductoConVariantes
-      })
+      return Array.from(productoMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre))
     },
     enabled: !!activeTienda,
   })

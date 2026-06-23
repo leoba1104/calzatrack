@@ -70,22 +70,21 @@ export function Sidebar() {
     <aside className="w-64 flex flex-col shrink-0" style={{ backgroundColor: 'var(--sidebar-bg)' }}>
 
       {/* Header */}
-      <div className="px-5 pt-6 pb-4 space-y-3">
+      <div className="px-5 pt-6 pb-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center shrink-0">
-            <Footprints className="w-4 h-4 text-white" />
-          </div>
+          {activeTienda?.logo_url ? (
+            <img
+              src={activeTienda.logo_url}
+              alt={activeTienda.nombre}
+              className="h-8 w-8 rounded-xl object-cover shrink-0"
+            />
+          ) : (
+            <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center shrink-0">
+              <Footprints className="w-4 h-4 text-white" />
+            </div>
+          )}
           <span className="text-[15px] font-bold text-white tracking-tight">CalzaTrack</span>
         </div>
-
-        {/* Store logo — shown below the brand, no card wrapper */}
-        {activeTienda?.logo_url && (
-          <img
-            src={activeTienda.logo_url}
-            alt={activeTienda.nombre}
-            className="h-12 w-auto object-contain drop-shadow-sm"
-          />
-        )}
       </div>
 
       {/* Nav */}
