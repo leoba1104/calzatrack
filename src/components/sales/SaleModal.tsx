@@ -7,6 +7,8 @@ import { Search, Plus, Trash, ShoppingCart } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { usePrinter } from '@/hooks/usePrinter'
+import { buildReceipt, type ReceiptData } from '@/utils/escpos'
 import { formatCRC, cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
@@ -68,11 +70,13 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
   const { activeTienda } = useAuth()
   const qc = useQueryClient()
   const { data: categoriasContado = [] } = useCategoriasContado()
+  const { isConnected, print } = usePrinter()
 
   const [items, setItems] = useState<LineItem[]>([])
   const [productSearch, setProductSearch] = useState('')
   const [showProductList, setShowProductList] = useState(false)
   const searchContainerRef = useRef<HTMLDivElement>(null)
+  const pendingReceiptRef  = useRef<ReceiptData | null>(null)
 
   useEffect(() => {
     if (!showProductList) return
@@ -337,8 +341,19 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
           if (eComplete) throw eComplete
         }
       }
+
+      return { ventaNumero: numData as string }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Print receipt if printer is connected
+      if (isConnected && pendingReceiptRef.current) {
+        const receiptData: ReceiptData = {
+          ...pendingReceiptRef.current,
+          ventaNumero: result.ventaNumero,
+        }
+        void print(buildReceipt(receiptData))
+      }
+
       qc.invalidateQueries({ queryKey: ['ventas'] })
       qc.invalidateQueries({ queryKey: ['pagos-ventas'] })
       qc.invalidateQueries({ queryKey: ['apartados'] })
@@ -365,9 +380,30 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
   const descuentoMonto = Math.round(totals.subtotal * descuentoPct / 100)
   const grandTotal     = Math.max(0, totals.subtotal - descuentoMonto)
 
+  function handleFormSubmit(d: HeaderData) {
+    // Capture receipt data now (before async mutation) so onSuccess has fresh values
+    pendingReceiptRef.current = {
+      storeName:    activeTienda?.nombre ?? '',
+      ventaNumero:  '',  // filled in onSuccess with the actual assigned number
+      fecha:        new Date(),
+      tipo:         d.tipo,
+      items:        items.map(i => ({
+        display:        i.display,
+        cantidad:       i.cantidad,
+        precioUnitario: i.precio_unitario,
+      })),
+      subtotal:     totals.subtotal,
+      descuento:    descuentoMonto,
+      descuentoPct: descuentoPct,
+      total:        grandTotal,
+      metodoPago:   d.metodo_pago || undefined,
+    }
+    mutation.mutate(d as HeaderData)
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Nueva venta" size="xl" scrollContent={false}>
-      <form noValidate onSubmit={handleSubmit((d) => mutation.mutate(d as HeaderData))} className="flex flex-col flex-1 min-h-0">
+      <form noValidate onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col flex-1 min-h-0">
         <div className="flex-1 overflow-hidden min-h-0 p-6 grid grid-cols-2 gap-6">
 
           {/* Left column — independently scrollable */}
