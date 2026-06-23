@@ -288,11 +288,11 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Por método de pago</p>
               <div className="grid grid-cols-2 gap-2">
                 {([
-                  ['Efectivo',      preview.efectivo,      'bg-green-50  text-green-800'],
-                  ['Tarjeta',       preview.tarjeta,       'bg-blue-50   text-blue-800'],
-                  ['SINPE Móvil',   preview.sinpe,         'bg-purple-50 text-purple-800'],
-                  ['Transferencia', preview.transferencia,  'bg-orange-50 text-orange-800'],
-                  ['Otro',          preview.otro,           'bg-gray-50   text-gray-700'],
+                  ['Efectivo',      preview.efectivo,      'bg-green-100 text-green-700'],
+                  ['Tarjeta',       preview.tarjeta,       'bg-blue-100 text-blue-700'],
+                  ['SINPE Móvil',   preview.sinpe,         'bg-purple-100 text-purple-700'],
+                  ['Transferencia', preview.transferencia,  'bg-orange-100 text-orange-700'],
+                  ['Otro',          preview.otro,           'bg-gray-100 text-gray-600'],
                 ] as [string, number, string][]).filter(([, v]) => v > 0).map(([label, value, cls]) => (
                   <div key={label} className={`rounded-xl p-3 ${cls}`}>
                     <p className="text-xs font-medium opacity-70">{label}</p>
@@ -311,13 +311,16 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                   Ventas normales — {formatCRC(preview.total_contado)}
                 </p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
                   {categoriasContado
                     .filter((cat) => (preview.categorias_totales[cat.slug] ?? 0) > 0)
                     .map((cat) => (
-                      <div key={cat.slug} className={`rounded-xl p-3 ${CIERRE_COLOR_MAP[cat.color] ?? 'bg-gray-50 text-gray-700'}`}>
-                        <p className="text-xs font-medium opacity-70">{cat.nombre}</p>
-                        <p className="text-sm font-bold mt-0.5">{formatCRC(preview.categorias_totales[cat.slug])}</p>
+                      <div key={cat.slug} className="flex items-center justify-between px-4 py-2.5 bg-white text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${CIERRE_COLOR_MAP[cat.color]?.split(' ')[0] ?? 'bg-gray-300'}`} />
+                          <span className="text-gray-600">{cat.nombre}</span>
+                        </div>
+                        <span className="font-semibold text-gray-900">{formatCRC(preview.categorias_totales[cat.slug])}</span>
                       </div>
                     ))
                   }
