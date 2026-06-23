@@ -38,21 +38,21 @@
   --sidebar-bg: #071832;
 }
 
-/* ── Dali Store (DAL) — Orange / Coral ───────────────────────── */
+/* ── Dali Store (DAL) — Amber / Terracotta ───────────────────── */
 [data-theme="DAL"] {
   --brand-50:  255 248 240;
-  --brand-100: 255 240 224;
+  --brand-100: 255 237 213;
   --brand-200: 254 215 170;
   --brand-300: 253 186 116;
   --brand-400: 251 146  60;
-  --brand-500: 249 115  22;
-  --brand-600: 234  88  12;
-  --brand-700: 194  71  10;
-  --brand-800: 154  58   8;
-  --brand-900: 124  45   7;
+  --brand-500: 234  88  12;
+  --brand-600: 194  65   8;
+  --brand-700: 154  50   6;
+  --brand-800: 124  40   5;
+  --brand-900:  96  30   4;
 
   --app-bg:     255 250 245;   /* very light warm/orange tint */
-  --sidebar-bg: #1c1028;
+  --sidebar-bg: #7C3410;       /* terracota ámbar — contrasta con el fondo oscuro del logo Dali */
 }
 
 @layer base {
