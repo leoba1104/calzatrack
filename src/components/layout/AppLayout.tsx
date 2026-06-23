@@ -5,17 +5,30 @@ import { Header } from './Header'
 import { useAuth } from '@/hooks/useAuth'
 
 export function AppLayout() {
-  const { activeTienda } = useAuth()
+  const { activeTienda, isLoading } = useAuth()
 
   useEffect(() => {
     const el = document.documentElement
     if (activeTienda?.prefijo) {
       el.setAttribute('data-theme', activeTienda.prefijo)
+      localStorage.setItem('calzatrack_theme', activeTienda.prefijo)
     } else {
       el.removeAttribute('data-theme')
+      localStorage.removeItem('calzatrack_theme')
     }
     return () => el.removeAttribute('data-theme')
   }, [activeTienda?.prefijo])
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'rgb(var(--app-bg))' }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-[3px] border-brand-200 border-t-brand-600 animate-spin" />
+          <p className="text-sm text-gray-400">Cargando...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'rgb(var(--app-bg))' }}>

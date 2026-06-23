@@ -65,7 +65,7 @@ function ProveedorModal({ isOpen, onClose, proveedor }: ProveedorModalProps) {
         const { error } = await supabase.from('proveedores').update(payload).eq('id', proveedor.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('proveedores').insert(payload)
+        const { error } = await supabase.from('proveedores').insert({ ...payload, tienda_id: activeTienda!.id })
         if (error) throw error
       }
     },
@@ -117,7 +117,7 @@ function ProveedorModal({ isOpen, onClose, proveedor }: ProveedorModalProps) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function SuppliersPage() {
-  const { canManage } = useAuth()
+  const { canManage, activeTienda } = useAuth()
   const qc = useQueryClient()
 
   const [modalOpen, setModalOpen] = useState(false)
@@ -125,15 +125,17 @@ export function SuppliersPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   const { data: proveedores, isLoading } = useQuery({
-    queryKey: ['proveedores'],
+    queryKey: ['proveedores', activeTienda?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('proveedores')
         .select('*')
+        .eq('tienda_id', activeTienda!.id)
         .order('nombre_empresa')
       if (error) throw error
       return data as Proveedor[]
     },
+    enabled: !!activeTienda,
   })
 
   const toggleActivo = useMutation({

@@ -4,11 +4,13 @@ import { Plus, Search, Users, Pencil, Trash, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { formatDate } from '@/lib/utils'
+import { useAuth } from '@/hooks/useAuth'
 import { ClientModal } from '@/components/clients/ClientModal'
 import type { Cliente } from '@/types'
 
 export function ClientsPage() {
   const qc = useQueryClient()
+  const { activeTienda } = useAuth()
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Cliente | null>(null)
@@ -28,13 +30,14 @@ export function ClientsPage() {
   })
 
   const { data: clientes, isLoading } = useQuery({
-    queryKey: ['clientes', search],
+    queryKey: ['clientes', activeTienda?.id, search],
     queryFn: async () => {
-      let query = supabase.from('clientes').select('*').order('nombre').limit(200)
+      let query = supabase.from('clientes').select('*').eq('tienda_id', activeTienda!.id).order('nombre').limit(200)
       if (search) query = query.or(`nombre.ilike.%${search}%,apellido.ilike.%${search}%,telefono.ilike.%${search}%`)
       const { data } = await query
       return (data ?? []) as Cliente[]
     },
+    enabled: !!activeTienda,
   })
 
   const deleteMutation = useMutation({

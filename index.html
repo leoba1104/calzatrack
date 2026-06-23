@@ -5,6 +5,8 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CalzaTrack</title>
+    <!-- Apply stored store theme before React loads to avoid flash -->
+    <script>(function(){var t=localStorage.getItem('calzatrack_theme');if(t)document.documentElement.setAttribute('data-theme',t);})()</script>
   </head>
   <body>
     <div id="root">

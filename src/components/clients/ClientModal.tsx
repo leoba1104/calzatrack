@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
 import { Modal } from '@/components/ui/Modal'
 import { FormField, inputClass } from '@/components/ui/FormField'
 import { PhoneInput, crPhoneSchema } from '@/components/ui/PhoneInput'
@@ -29,6 +30,7 @@ interface ClientModalProps {
 
 export function ClientModal({ isOpen, onClose, cliente }: ClientModalProps) {
   const qc = useQueryClient()
+  const { activeTienda } = useAuth()
   const isEditing = !!cliente
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -62,7 +64,7 @@ export function ClientModal({ isOpen, onClose, cliente }: ClientModalProps) {
         const { error } = await supabase.from('clientes').update(payload).eq('id', cliente.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('clientes').insert(payload)
+        const { error } = await supabase.from('clientes').insert({ ...payload, tienda_id: activeTienda!.id })
         if (error) throw error
       }
     },
