@@ -46,7 +46,7 @@ const STOCK_PAGE = 10
 
 // ── Raw Supabase types ─────────────────────────────────────────
 type RawVenta = {
-  fecha: string; total: number; descuento: number; tipo: string
+  fecha: string | null; total: number; descuento: number; tipo: string
   tienda:   { nombre: string } | null
   empleado: { nombre: string; apellido: string | null } | null
 }
@@ -69,7 +69,7 @@ type RawInv = {
     producto: { nombre: string } | null
   } | null
 }
-type RawCompra = { fecha: string; total_pagado: number }
+type RawCompra = { fecha: string | null; total_pagado: number }
 
 // ── UI helpers ─────────────────────────────────────────────────
 function SectionTitle({ title }: { title: string }) {
@@ -105,12 +105,16 @@ function empNombre(e: { nombre: string; apellido: string | null } | null): strin
 }
 
 function groupByTime(
-  items: { fecha: string; total: number }[],
+  items: { fecha: string | null | undefined; total: number }[],
   esAnio: boolean
 ): { label: string; total: number }[] {
   const acc: Record<string, { label: string; total: number }> = {}
   for (const item of items) {
-    const d       = new Date(item.fecha + 'T12:00:00')
+    if (!item.fecha) continue
+    // slice(0, 10) normalises both DATE ("2026-06-22") and
+    // TIMESTAMPTZ ("2026-06-22T00:00:00+00:00") to "YYYY-MM-DD"
+    const d = new Date(item.fecha.slice(0, 10) + 'T12:00:00')
+    if (isNaN(d.getTime())) continue
     const sortKey = esAnio ? format(d, 'yyyy-MM') : format(d, 'yyyy-MM-dd')
     const label   = esAnio ? format(d, 'MMM', { locale: es }) : format(d, 'd/M', { locale: es })
     if (!acc[sortKey]) acc[sortKey] = { label, total: 0 }

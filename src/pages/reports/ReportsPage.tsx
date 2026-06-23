@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardList, Eye, Search } from 'lucide-react'
+import { ClipboardList, Eye } from 'lucide-react'
 import { useCategoriasContado, CIERRE_COLOR_MAP } from '@/hooks/useCategoriasContado'
 import { format, parse, isValid, isWithinInterval, startOfDay, endOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -135,7 +135,6 @@ function CierreDetailModal({ cierre, onClose }: { cierre: CierreCaja; onClose: (
 export function ReportsPage() {
   const { activeTienda, isAdmin } = useAuth()
 
-  const [search, setSearch]             = useState('')
   const [dateRange, setDateRange]       = useState<DateRange>({ from: null, to: null })
   const [detailCierre, setDetailCierre] = useState<CierreCaja | null>(null)
 
@@ -171,12 +170,6 @@ export function ReportsPage() {
       const hi    = rangeTo && isValid(rangeTo) ? endOfDay(rangeTo) : endOfDay(rangeFrom)
       if (!isWithinInterval(cDate, { start: lo, end: hi })) return false
     }
-    if (search) {
-      const hora     = format(new Date(c.created_at), 'HH:mm')
-      const fechaStr = format(new Date(c.fecha + 'T12:00:00'), "d 'de' MMMM", { locale: es }).toLowerCase()
-      const q        = search.toLowerCase()
-      if (!fechaStr.includes(q) && !hora.includes(q) && !(c.notas ?? '').toLowerCase().includes(q)) return false
-    }
     return true
   })
 
@@ -201,16 +194,7 @@ export function ReportsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative w-52">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por fecha, hora..."
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-          />
-        </div>
+      <div className="flex items-center gap-2">
         <DateRangePicker
           value={dateRange}
           onChange={setDateRange}
