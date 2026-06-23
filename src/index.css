@@ -4,8 +4,6 @@
 
 /* ── Default theme (Admin / purple) ──────────────────────────── */
 :root {
-  --logo-filter: none;
-
   /* Brand palette — RGB channels (no rgb() wrapper) so Tailwind
      opacity modifiers like bg-brand-600/20 work correctly          */
   --brand-50:  250 245 255;
@@ -53,9 +51,8 @@
   --brand-800: 124  40   5;
   --brand-900:  96  30   4;
 
-  --app-bg:      255 250 245;
-  --sidebar-bg:  #160829;      /* igual que el default — logo se muestra en blanco via filtro */
-  --logo-filter: brightness(0) invert(1);  /* convierte el logo a silueta blanca */
+  --app-bg:     255 250 245;
+  --sidebar-bg: #160829;
 }
 
 @layer base {
