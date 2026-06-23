@@ -37,7 +37,7 @@ export function usePrinter() {
     setConnecting(true)
     try {
       const port = await navigator.serial.requestPort()
-      await port.open({ baudRate: 115200 })
+      await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' })
       _port = port
       setConnected(true)
       toast.success('Impresora conectada')
@@ -69,9 +69,12 @@ export function usePrinter() {
       const writer = _port.writable.getWriter()
       await writer.write(data)
       writer.releaseLock()
+      console.log('[Printer] sent', data.byteLength, 'bytes')
       return true
-    } catch {
-      toast.error('Error al imprimir — reconecte la impresora')
+    } catch (e) {
+      const err = e as Error
+      console.error('[Printer] print error:', err.name, err.message)
+      toast.error(`Error al imprimir: ${err.message || err.name}`)
       _port = null
       setConnected(false)
       return false
