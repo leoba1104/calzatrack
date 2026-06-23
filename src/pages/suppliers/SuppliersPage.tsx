@@ -33,6 +33,7 @@ interface ProveedorModalProps {
 
 function ProveedorModal({ isOpen, onClose, proveedor }: ProveedorModalProps) {
   const qc = useQueryClient()
+  const { activeTienda } = useAuth()
   const isEditing = !!proveedor
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
