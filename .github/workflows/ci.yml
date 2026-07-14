@@ -1,0 +1,61 @@
+name: CI
+
+# Valida todo PR y todo push a las ramas de integración/producción.
+# Vercel se encarga del deploy (main → Production, develop/PRs → Preview);
+# este workflow es la puerta de calidad previa al merge.
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint · Tests · Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Typecheck + build
+        run: pnpm build
+
+  migrations-check:
+    name: Migraciones ordenadas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Las migraciones son solo-append: renombrar o borrar una ya aplicada
+      # rompe el tracking de supabase db push.
+      - name: Verificar numeración secuencial sin huecos ni duplicados
+        run: |
+          cd supabase/migrations
+          nums=$(ls *.sql | sed 's/_.*//' | sort -n)
+          expected=$(seq -f '%03g' 1 $(ls *.sql | wc -l))
+          if [ "$nums" != "$expected" ]; then
+            echo "::error::La numeración de migraciones tiene huecos o duplicados"
+            diff <(echo "$nums") <(echo "$expected") || true
+            exit 1
+          fi

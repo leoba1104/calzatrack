@@ -1,14 +1,24 @@
 name: Supabase Migrations
 
+# Aplica migraciones nuevas al proyecto Supabase del ambiente correspondiente:
+#   push a develop → environment "development" (Supabase dev)
+#   push a main    → environment "production"  (Supabase prod)
+# Cada GitHub Environment define su propio secret SUPABASE_DB_URL.
+
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - 'supabase/migrations/**'
+
+concurrency:
+  group: migrate-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   migrate:
     runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
     steps:
       - uses: actions/checkout@v4
 
