@@ -3,7 +3,7 @@ import { cn, formatCRC, formatDate, formatDateTime } from './utils'
 
 describe('cn', () => {
   it('combina clases condicionales', () => {
-    expect(cn('a', false && 'b', 'c')).toBe('a c')
+    expect(cn('a', { b: false, c: true }, undefined, null)).toBe('a c')
   })
 
   it('resuelve conflictos de Tailwind dejando la última', () => {
