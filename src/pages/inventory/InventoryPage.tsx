@@ -112,37 +112,26 @@ export function InventoryPage() {
         .eq('producto_id', id)
       const varIds = (variantesData ?? []).map((v) => v.id)
 
-      // Check if any variant is referenced by an unpaid (pendiente) venta
-      let hasUnpaid = false
+      // Si alguna variante aparece en detalle_ventas (venta activa o histórica)
+      // el producto solo se desactiva: las líneas de venta son el respaldo
+      // contable de los totales y nunca se borran desde inventario.
+      let hasSales = false
       if (varIds.length > 0) {
         const { data: detalles } = await supabase
           .from('detalle_ventas')
-          .select('venta_id')
+          .select('id')
           .in('variante_id', varIds)
-        const ventaIds = [...new Set((detalles ?? []).map((d) => d.venta_id))]
-        if (ventaIds.length > 0) {
-          const { data: unpaid } = await supabase
-            .from('ventas')
-            .select('id')
-            .in('id', ventaIds)
-            .eq('estado', 'pendiente')
-            .limit(1)
-          hasUnpaid = (unpaid ?? []).length > 0
-        }
+          .limit(1)
+        hasSales = (detalles ?? []).length > 0
       }
 
-      if (hasUnpaid) {
+      if (hasSales) {
         const { error: e2 } = await supabase.from('productos').update({ activo: false }).eq('id', id)
         if (e2) throw e2
         return 'deactivated'
       }
 
-      // All references are from completed sales — safe to hard delete.
-      // Remove child rows first: detalle_ventas, inventario_tienda, then variants, then product.
-      if (varIds.length > 0) {
-        await supabase.from('detalle_ventas').delete().in('variante_id', varIds)
-        await supabase.from('inventario_tienda').delete().in('variante_id', varIds)
-      }
+      // Sin ventas que lo referencien — borrar; variantes e inventario caen en cascada
       const { error } = await supabase.from('productos').delete().eq('id', id)
       if (error) throw error
       return 'deleted'
@@ -151,7 +140,7 @@ export function InventoryPage() {
       qc.invalidateQueries({ queryKey: ['inventario'] })
       setConfirmTarget(null)
       if (result === 'deactivated') {
-        toast.success('Producto desactivado — está en un apartado o crédito activo')
+        toast.success('Producto desactivado — tiene ventas registradas y no puede eliminarse')
       } else {
         toast.success('Producto eliminado')
       }
@@ -161,35 +150,21 @@ export function InventoryPage() {
 
   const deleteVariante = useMutation({
     mutationFn: async (id: string) => {
-      // Get all venta_ids that reference this variant
+      // Si la variante aparece en detalle_ventas (venta activa o histórica)
+      // solo se desactiva: las líneas de venta nunca se borran desde inventario.
       const { data: detalles } = await supabase
         .from('detalle_ventas')
-        .select('venta_id')
+        .select('id')
         .eq('variante_id', id)
+        .limit(1)
 
-      const ventaIds = [...new Set((detalles ?? []).map((d) => d.venta_id))]
-
-      // Check if any of those ventas are still unpaid (pendiente)
-      const hasUnpaid = ventaIds.length > 0
-        ? ((await supabase
-            .from('ventas')
-            .select('id')
-            .in('id', ventaIds)
-            .eq('estado', 'pendiente')
-            .limit(1)
-          ).data ?? []).length > 0
-        : false
-
-      if (hasUnpaid) {
+      if ((detalles ?? []).length > 0) {
         const { error: e2 } = await supabase.from('variantes_producto').update({ activo: false }).eq('id', id)
         if (e2) throw e2
         return 'deactivated'
       }
 
-      // All references are from completed sales — safe to hard delete.
-      // Must remove child rows first: detalle_ventas, then inventario_tienda.
-      await supabase.from('detalle_ventas').delete().eq('variante_id', id)
-      await supabase.from('inventario_tienda').delete().eq('variante_id', id)
+      // Sin ventas que la referencien — borrar; el inventario cae en cascada
       const { error } = await supabase.from('variantes_producto').delete().eq('id', id)
       if (error) throw error
       return 'deleted'
@@ -198,7 +173,7 @@ export function InventoryPage() {
       qc.invalidateQueries({ queryKey: ['inventario'] })
       setConfirmTarget(null)
       if (result === 'deactivated') {
-        toast.success('Variante desactivada — está en un apartado o crédito activo')
+        toast.success('Variante desactivada — tiene ventas registradas y no puede eliminarse')
       } else {
         toast.success('Variante eliminada')
       }
@@ -238,7 +213,11 @@ export function InventoryPage() {
   function toggleExpand(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
       return next
     })
   }

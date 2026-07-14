@@ -162,11 +162,10 @@ export function PurchaseModal({ isOpen, onClose }: PurchaseModalProps) {
           .from('facturas-compra')
           .upload(path, imageFile, { upsert: true })
         if (upErr) {
-          console.error('[Storage 400]', upErr)
           toast.error(`Imagen no subida: ${upErr.message}`)
         } else {
-          const { data: urlData } = supabase.storage.from('facturas-compra').getPublicUrl(path)
-          await supabase.from('compras').update({ factura_imagen_url: urlData.publicUrl }).eq('id', compra.id)
+          // El bucket es privado: se guarda el path y la vista genera URLs firmadas
+          await supabase.from('compras').update({ factura_imagen_url: path }).eq('id', compra.id)
         }
       }
     },

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import jsPDF from 'jspdf'
+import { useQuery } from '@tanstack/react-query'
 import { Loader2, Printer } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { supabase } from '@/lib/supabase'
 import { formatCRC, formatDate, cn } from '@/lib/utils'
 import type { Compra, DetalleCompra } from '@/types'
 
@@ -40,13 +41,15 @@ function getImageSize(dataUrl: string): Promise<{ w: number; h: number }> {
   })
 }
 
-async function downloadPDF(compra: Compra) {
+async function downloadPDF(compra: Compra, facturaImagenUrl: string | null) {
   const proveedor = (compra.proveedor as { nombre_empresa: string } | undefined)?.nombre_empresa ?? '—'
   const items = (compra.items ?? []) as unknown as (DetalleCompra & {
     variante?: { sku: string; talla: string | null; color: string | null } | null
     producto?: { nombre: string } | null
   })[]
 
+  // jsPDF se carga bajo demanda: pesa demasiado para el bundle inicial
+  const { default: jsPDF } = await import('jspdf')
   const pdf  = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
   const PW   = 210   // page width mm
   const ML   = 20    // margin left
@@ -102,8 +105,8 @@ async function downloadPDF(compra: Compra) {
   y += 8
 
   // ── Invoice image ─────────────────────────────────────────────────────────
-  if (compra.factura_imagen_url) {
-    const img = await fetchImageAsBase64(compra.factura_imagen_url)
+  if (facturaImagenUrl) {
+    const img = await fetchImageAsBase64(facturaImagenUrl)
     if (img) {
       const { w, h } = await getImageSize(img.data)
       const MAX_W = CW
@@ -221,6 +224,22 @@ const estadoLabel: Record<Compra['estado'], string> = {
 export function CompraDetailModal({ compra, isOpen, onClose }: CompraDetailModalProps) {
   const [downloading, setDownloading] = useState(false)
 
+  // El bucket facturas-compra es privado: factura_imagen_url guarda el path
+  // dentro del bucket y aquí se firma una URL temporal para verla.
+  const { data: facturaUrl } = useQuery({
+    queryKey: ['factura-imagen', compra?.id, compra?.factura_imagen_url],
+    queryFn: async () => {
+      // Compras viejas pueden traer la URL pública completa — extraer el path
+      const path = compra!.factura_imagen_url!.replace(/^.*\/facturas-compra\//, '')
+      const { data, error } = await supabase.storage
+        .from('facturas-compra')
+        .createSignedUrl(path, 3600)
+      if (error) throw error
+      return data.signedUrl
+    },
+    enabled: isOpen && !!compra?.factura_imagen_url,
+  })
+
   if (!compra) return null
 
   const proveedor = (compra.proveedor as { nombre_empresa: string } | undefined)?.nombre_empresa
@@ -232,7 +251,7 @@ export function CompraDetailModal({ compra, isOpen, onClose }: CompraDetailModal
   async function handleDownload() {
     setDownloading(true)
     try {
-      await downloadPDF(compra!)
+      await downloadPDF(compra!, facturaUrl ?? null)
     } finally {
       setDownloading(false)
     }
@@ -266,12 +285,12 @@ export function CompraDetailModal({ compra, isOpen, onClose }: CompraDetailModal
 
         <div className="flex-1 overflow-y-auto">
           {/* Invoice image — view only */}
-          {compra.factura_imagen_url && (
+          {compra.factura_imagen_url && facturaUrl && (
             <div className="px-6 py-4 border-b border-gray-100">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Factura original</p>
-              <a href={compra.factura_imagen_url} target="_blank" rel="noreferrer">
+              <a href={facturaUrl} target="_blank" rel="noreferrer">
                 <img
-                  src={compra.factura_imagen_url}
+                  src={facturaUrl}
                   alt="Factura original"
                   className="max-h-52 rounded-xl border border-gray-200 object-contain hover:opacity-90 transition-opacity cursor-zoom-in"
                 />

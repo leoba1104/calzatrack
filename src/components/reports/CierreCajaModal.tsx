@@ -6,12 +6,14 @@ import { es } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { usePrinter } from '@/hooks/usePrinter'
 import { Modal } from '@/components/ui/Modal'
 import { Textarea } from '@/components/ui/Textarea'
 import { FormField } from '@/components/ui/FormField'
 import { formatCRC } from '@/lib/utils'
 import type { MetodoPago, VentaTipo } from '@/types'
 import { useCategoriasContado, CIERRE_COLOR_MAP } from '@/hooks/useCategoriasContado'
+import { buildCierreReceipt } from '@/utils/escpos'
 
 interface Props {
   isOpen: boolean
@@ -45,6 +47,7 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
   const { activeTienda, user } = useAuth()
   const qc = useQueryClient()
   const { data: categoriasContado = [] } = useCategoriasContado()
+  const { isConnected, print } = usePrinter()
 
   const today  = format(new Date(), 'yyyy-MM-dd')
   const endISO = endOfDay(new Date()).toISOString()
@@ -74,11 +77,12 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
 
       const desde = lastCierre?.created_at ?? startOfDay(new Date()).toISOString()
 
-      // 2. All ventas for this tienda (include categoria_venta)
+      // 2. Ventas activas de la tienda (las archivadas pertenecen a cierres pasados)
       const { data: ventasRaw, error: eVentas } = await supabase
         .from('ventas')
         .select('id, tipo, estado, empleado_id, categoria_venta')
         .eq('tienda_id', activeTienda.id)
+        .eq('archivado', false)
       if (eVentas) throw eVentas
 
       const tiendaVentaIds      = (ventasRaw ?? []).map((v) => v.id)
@@ -180,6 +184,9 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
     }
   }
 
+  const fechaLabel = format(new Date(), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
+  const esPrimerCierre = !preview || preview.desde === startOfDay(new Date()).toISOString()
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!preview || !activeTienda || !user) throw new Error('Datos incompletos')
@@ -209,29 +216,56 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
       })
       if (error) throw error
 
-      // Cleanup: delete all ventas the cierre has captured.
-      // - contado: scoped by creation date (ephemeral, deleted every cierre)
-      // - apartado/crédito pagados: delete regardless of creation date since
-      //   their payments are now persisted in the cierre totals
-      // CASCADE removes detalle_ventas and pagos_venta automatically.
+      // Archivar las ventas capturadas por el cierre (nunca borrarlas: el
+      // detalle debe conservarse como respaldo contable de los totales).
+      // - contado: por fecha de creación dentro de la ventana del cierre
+      // - apartado/crédito pagados: sus pagos ya quedaron en los totales
       const { error: cleanupContado } = await supabase
         .from('ventas')
-        .delete()
+        .update({ archivado: true })
         .eq('tienda_id', activeTienda.id)
         .eq('tipo', 'contado')
+        .eq('archivado', false)
         .gt('created_at', preview.desde)
         .lte('created_at', hasta)
       if (cleanupContado) throw cleanupContado
 
       const { error: cleanupPagadas } = await supabase
         .from('ventas')
-        .delete()
+        .update({ archivado: true })
         .eq('tienda_id', activeTienda.id)
         .eq('estado', 'pagada')
         .in('tipo', ['apartado', 'credito'])
       if (cleanupPagadas) throw cleanupPagadas
     },
     onSuccess: () => {
+      if (isConnected && preview && activeTienda) {
+        const receiptData = {
+          storeName:         activeTienda.nombre,
+          fechaLabel,
+          esPrimerCierre,
+          desdeHora:         esPrimerCierre ? null : format(new Date(preview.desde), 'HH:mm'),
+          efectivo:          preview.efectivo,
+          tarjeta:           preview.tarjeta,
+          sinpe:             preview.sinpe,
+          transferencia:     preview.transferencia,
+          otro:              preview.otro,
+          totalContado:      preview.total_contado,
+          totalApartados:    preview.total_apartados,
+          totalCreditos:     preview.total_creditos,
+          totalDia:          preview.total_dia,
+          categorias: categoriasContado
+            .filter((cat) => (preview.categorias_totales[cat.slug] ?? 0) > 0)
+            .map((cat) => ({ nombre: cat.nombre, total: preview.categorias_totales[cat.slug] })),
+          empleados:         preview.breakdown_empleados.map((e) => ({ nombre: e.nombre, total: e.total })),
+          paresVendidos:     preview.pares_vendidos,
+          apartadosAbiertos: preview.apartados_abiertos,
+          creditosAbiertos:  preview.creditos_abiertos,
+          notas:             notas.trim() || undefined,
+        }
+        void print(buildCierreReceipt(receiptData))
+      }
+
       qc.invalidateQueries({ queryKey: ['cierres'] })
       qc.invalidateQueries({ queryKey: ['cierre-hoy'] })
       toast.success('Cierre de caja guardado')
@@ -246,9 +280,6 @@ export function CierreCajaModal({ isOpen, onClose }: Props) {
     setLoading(false)
     onClose()
   }
-
-  const fechaLabel = format(new Date(), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
-  const esPrimerCierre = !preview || preview.desde === startOfDay(new Date()).toISOString()
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Cierre de caja">

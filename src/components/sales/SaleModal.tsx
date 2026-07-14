@@ -241,6 +241,8 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
 
   const mutation = useMutation({
     mutationFn: async (data: HeaderData) => {
+      // Validaciones rápidas para feedback inmediato — la RPC re-valida todo
+      // en el servidor y además recalcula los precios desde la BD.
       if (items.length === 0) throw new Error('NO_ITEMS')
       if (tipoActual === 'contado' && !data.categoria_venta) throw new Error('NO_CATEGORIA')
       if (tipoActual === 'contado' && !data.metodo_pago) throw new Error('NO_PAGO')
@@ -251,98 +253,26 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
       const abonoInicial = data.abono_inicial ?? 0
       if (tipoActual !== 'contado' && abonoInicial > 0 && !data.metodo_pago) throw new Error('NO_PAGO')
 
-      const descuentoPct = hayOferta ? 0 : (data.descuento ?? 0)
-      const { subtotal } = totals
-      const impuesto = 0
-      const descuento = Math.round(subtotal * descuentoPct / 100)
-      const total = subtotal - descuento
+      // Toda la venta (número, encabezado, líneas, stock y pago) se crea en
+      // una sola transacción del lado del servidor.
+      const { data: result, error } = await supabase.rpc('crear_venta', {
+        p_tienda_id:         activeTienda!.id,
+        p_tipo:              data.tipo,
+        p_items:             items.map((item) => ({ variante_id: item.variante_id, cantidad: item.cantidad })),
+        p_cliente_id:        data.cliente_id || null,
+        p_empleado_id:       data.empleado_id || null,
+        p_categoria_venta:   data.tipo === 'contado' ? (data.categoria_venta || null) : null,
+        p_metodo_pago:       (data.metodo_pago as MetodoPago) || null,
+        p_descuento_pct:     hayOferta ? 0 : (data.descuento ?? 0),
+        p_abono_inicial:     abonoInicial,
+        p_contacto_nombre:   data.contacto_nombre?.trim() || null,
+        p_contacto_apellido: data.contacto_apellido?.trim() || null,
+        p_contacto_telefono: data.contacto_telefono?.trim() || null,
+      })
+      if (error) throw new Error(error.message)
 
-      // 1. Get sequential number
-      const { data: numData, error: numErr } = await supabase
-        .rpc('get_next_numero_venta', { p_tienda_id: activeTienda!.id })
-      if (numErr) throw numErr
-
-      // 2. Insert venta — estado='pendiente' initially (trigger only fires on UPDATE to 'pagada')
-      const { data: venta, error: ventaErr } = await supabase
-        .from('ventas')
-        .insert({
-          tienda_id:    activeTienda!.id,
-          cliente_id:   data.cliente_id || null,
-          empleado_id:  data.empleado_id || null,
-          numero_venta: numData as string,
-          subtotal,
-          impuesto,
-          descuento,
-          total,
-          tipo:              data.tipo,
-          categoria_venta:   data.tipo === 'contado' ? (data.categoria_venta || null) : null,
-          estado:            'pendiente',
-          notas:             null,
-          contacto_nombre:   data.contacto_nombre?.trim() || null,
-          contacto_apellido: data.contacto_apellido?.trim() || null,
-          contacto_telefono: data.contacto_telefono?.trim() || null,
-        })
-        .select('id')
-        .single()
-      if (ventaErr) throw ventaErr
-
-      // 3. Insert line items
-      const { error: itemsErr } = await supabase.from('detalle_ventas').insert(
-        items.map((item) => ({
-          venta_id:       venta.id,
-          variante_id:    item.variante_id,
-          cantidad:       item.cantidad,
-          precio_unitario: item.precio_unitario,
-          descuento_item: 0,
-          subtotal:       item.cantidad * item.precio_unitario,
-        }))
-      )
-      if (itemsErr) throw itemsErr
-
-      // 4. Stock management:
-      //    contado    → update estado → pagada (trigger decrements stock)
-      //    apartado/crédito → call RPC to reserve stock immediately at creation
-      if (data.tipo === 'contado') {
-        const { error: updateErr } = await supabase
-          .from('ventas')
-          .update({ estado: 'pagada' })
-          .eq('id', venta.id)
-        if (updateErr) throw updateErr
-      } else {
-        const { error: reservaErr } = await supabase
-          .rpc('reservar_stock_venta', { p_venta_id: venta.id })
-        if (reservaErr) throw reservaErr
-      }
-
-      // 5. Register payment
-      if (data.tipo === 'contado' && data.metodo_pago) {
-        // Full payment — registers the complete total
-        const { error: pagoErr } = await supabase.from('pagos_venta').insert({
-          venta_id:   venta.id,
-          empleado_id: data.empleado_id || null,
-          monto:      total,
-          tipo_pago:  data.metodo_pago as MetodoPago,
-        })
-        if (pagoErr) throw pagoErr
-      } else if (data.tipo !== 'contado' && abonoInicial > 0 && data.metodo_pago) {
-        // Initial deposit for apartado/crédito
-        const { error: pagoErr } = await supabase.from('pagos_venta').insert({
-          venta_id:   venta.id,
-          empleado_id: data.empleado_id || null,
-          monto:      abonoInicial,
-          tipo_pago:  data.metodo_pago as MetodoPago,
-        })
-        if (pagoErr) throw pagoErr
-
-        // If initial payment covers the full balance, mark credit as paid
-        if (data.tipo === 'credito' && abonoInicial >= total) {
-          const { error: eComplete } = await supabase
-            .from('ventas').update({ estado: 'pagada' }).eq('id', venta.id)
-          if (eComplete) throw eComplete
-        }
-      }
-
-      return { ventaNumero: numData as string }
+      const venta = result as { venta_id: string; numero_venta: string; total: number }
+      return { ventaNumero: venta.numero_venta }
     },
     onSuccess: (result) => {
       // Print receipt if printer is connected
@@ -365,13 +295,17 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
       handleClose()
     },
     onError: (e: Error) => {
-      if (e.message === 'NO_ITEMS')          toast.error('Agregue al menos un producto')
-      else if (e.message === 'NO_CATEGORIA') toast.error('Seleccione la categoría de la venta')
-      else if (e.message === 'NO_PAGO')      toast.error('Seleccione el método de pago')
-      else if (e.message === 'NO_CLIENTE_CREDITO') toast.error('El crédito debe asignarse a un cliente registrado')
-      else if (e.message === 'CLIENTE_MOROSO') toast.error('No se puede crear un crédito a un cliente moroso')
-      else if (e.message === 'NO_CONTACTO_NOMBRE')   toast.error('Ingrese el nombre del cliente del apartado')
-      else if (e.message === 'NO_CONTACTO_APELLIDO') toast.error('Ingrese el apellido del cliente del apartado')
+      const msg = e.message
+      if (msg.includes('NO_ITEMS'))          toast.error('Agregue al menos un producto')
+      else if (msg.includes('NO_CATEGORIA')) toast.error('Seleccione la categoría de la venta')
+      else if (msg.includes('NO_PAGO'))      toast.error('Seleccione el método de pago')
+      else if (msg.includes('NO_CLIENTE_CREDITO')) toast.error('El crédito debe asignarse a un cliente registrado')
+      else if (msg.includes('CLIENTE_MOROSO')) toast.error('No se puede crear un crédito a un cliente moroso')
+      else if (msg.includes('NO_CONTACTO_NOMBRE') || msg.includes('CONTACTO_REQUERIDO')) toast.error('Ingrese el nombre del cliente del apartado')
+      else if (msg.includes('NO_CONTACTO_APELLIDO')) toast.error('Ingrese el apellido del cliente del apartado')
+      else if (msg.includes('STOCK_INSUFICIENTE')) toast.error(`Stock insuficiente: ${msg.split(':')[1] ?? 'producto'}`)
+      else if (msg.includes('VARIANTE_INVALIDA')) toast.error('Un producto del carrito ya no está disponible')
+      else if (msg.includes('NO_AUTORIZADO')) toast.error('No tiene permiso para vender en esta tienda')
       else toast.error('Error al registrar la venta')
     },
   })
@@ -381,12 +315,16 @@ export function SaleModal({ isOpen, onClose, initialTipo = 'contado' }: SaleModa
   const grandTotal     = Math.max(0, totals.subtotal - descuentoMonto)
 
   function handleFormSubmit(d: HeaderData) {
+    const vendedor = empleados?.find((e) => e.id === d.empleado_id)
+
     // Capture receipt data now (before async mutation) so onSuccess has fresh values
     pendingReceiptRef.current = {
-      storeName:    activeTienda?.nombre ?? '',
-      ventaNumero:  '',  // filled in onSuccess with the actual assigned number
-      fecha:        new Date(),
-      tipo:         d.tipo,
+      storeName:      activeTienda?.nombre ?? '',
+      storeAddress:   activeTienda?.direccion ?? undefined,
+      ventaNumero:    '',  // filled in onSuccess with the actual assigned number
+      fecha:          new Date(),
+      tipo:           d.tipo,
+      vendedorNombre: vendedor ? `${vendedor.nombre} ${vendedor.apellido ?? ''}`.trim() : undefined,
       items:        items.map(i => ({
         display:        i.display,
         cantidad:       i.cantidad,
