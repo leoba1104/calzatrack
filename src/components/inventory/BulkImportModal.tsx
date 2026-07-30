@@ -108,6 +108,57 @@ function downloadTemplate() {
 
 // ── Main import logic ────────────────────────────────────────────────────────
 
+// Normaliza para comparar nombres de marca/categoría ignorando mayúsculas y
+// espacios extra ("Nike", "nike ", "NIKE") — sin esto el import creaba una
+// fila duplicada por cada variación de escritura del mismo nombre.
+function normalizeName(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+// Resuelve nombres de un CSV contra una tabla catálogo (marcas/categorias),
+// creando solo los que no existan (comparación insensible a mayúsculas/espacios).
+// Devuelve un mapa del nombre EXACTO tal como viene en el CSV → id resuelto.
+async function resolveCatalogIds(
+  table: 'marcas' | 'categorias',
+  names: string[]
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>()
+  if (names.length === 0) return result
+
+  const { data: existingRows } = await supabase.from(table).select('id, nombre')
+  const byNormalized = new Map<string, string>()
+  for (const row of existingRows ?? []) {
+    byNormalized.set(normalizeName(row.nombre), row.id)
+  }
+
+  // Nombres únicos por versión normalizada — solo se inserta uno por grupo
+  const uniqueByNormalized = new Map<string, string>() // normalized -> nombre original a insertar
+  for (const name of names) {
+    const key = normalizeName(name)
+    if (!uniqueByNormalized.has(key)) uniqueByNormalized.set(key, name.trim().replace(/\s+/g, ' '))
+  }
+
+  for (const [key, displayName] of uniqueByNormalized) {
+    let id: string | undefined = byNormalized.get(key)
+    if (!id) {
+      const { data: created } = await supabase.from(table).insert({ nombre: displayName }).select('id').single()
+      const createdId: string | undefined = (created as { id?: string } | null)?.id
+      if (createdId) {
+        id = createdId
+        byNormalized.set(key, id)
+      }
+    }
+    if (id) {
+      // Mapear también cada variante de escritura original del CSV a este id
+      for (const original of names) {
+        if (normalizeName(original) === key) result.set(original, id)
+      }
+    }
+  }
+
+  return result
+}
+
 async function runImport(rows: ParsedRow[], tiendaId: string): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, skipped: 0, errors: [] }
 
@@ -115,29 +166,9 @@ async function runImport(rows: ParsedRow[], tiendaId: string): Promise<ImportRes
   const marcaNames = [...new Set(rows.map((r) => r.marca).filter(Boolean))]
   const catNames = [...new Set(rows.map((r) => r.categoria).filter(Boolean))]
 
-  // 2. Upsert marcas — insert individually to handle missing unique constraint gracefully
-  const marcaMap = new Map<string, string>()
-  for (const nombre of marcaNames) {
-    const { data: existing } = await supabase.from('marcas').select('id').eq('nombre', nombre).maybeSingle()
-    if (existing) {
-      marcaMap.set(nombre, existing.id)
-    } else {
-      const { data: newM } = await supabase.from('marcas').insert({ nombre }).select('id').single()
-      if (newM) marcaMap.set(nombre, newM.id)
-    }
-  }
-
-  // 3. Upsert categorias — same approach
-  const catMap = new Map<string, string>()
-  for (const nombre of catNames) {
-    const { data: existing } = await supabase.from('categorias').select('id').eq('nombre', nombre).maybeSingle()
-    if (existing) {
-      catMap.set(nombre, existing.id)
-    } else {
-      const { data: newC } = await supabase.from('categorias').insert({ nombre }).select('id').single()
-      if (newC) catMap.set(nombre, newC.id)
-    }
-  }
+  // 2. Resolver marcas y categorías — insensible a mayúsculas/espacios
+  const marcaMap = await resolveCatalogIds('marcas', marcaNames)
+  const catMap = await resolveCatalogIds('categorias', catNames)
 
   // 4. Group rows by product name
   const groups = new Map<string, ParsedRow[]>()
