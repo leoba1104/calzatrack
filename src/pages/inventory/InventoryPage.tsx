@@ -40,7 +40,7 @@ export function InventoryPage() {
   const [search, setSearch] = useState('')
   const [brandFilter, setBrandFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [productModal, setProductModal] = useState(false)
@@ -181,12 +181,12 @@ export function InventoryPage() {
     onError: () => toast.error('Error al eliminar la variante'),
   })
 
-  const hasFilters = !!brandFilter || !!categoryFilter || statusFilter !== 'all'
+  const hasFilters = !!brandFilter || !!categoryFilter || statusFilter !== 'active'
 
   function clearFilters() {
     setBrandFilter('')
     setCategoryFilter('')
-    setStatusFilter('all')
+    setStatusFilter('active')
     setSearch('')
   }
 
@@ -455,7 +455,9 @@ export function InventoryPage() {
                       </tr>
 
                       {/* Variant rows (expanded) */}
-                      {isOpen && p.variantes.map((v) => {
+                      {isOpen && p.variantes
+                        .filter((v) => statusFilter !== 'active' || v.activo)
+                        .map((v) => {
                         const confirmingVariante = isConfirming('variante', v.id)
                         return (
                           <tr key={v.id} className="bg-purple-50/30 border-b border-gray-50 hover:bg-purple-50/50 transition-colors">
