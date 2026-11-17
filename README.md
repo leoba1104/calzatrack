@@ -1,109 +1,121 @@
 # CalzaTrack
 
-CRM interno e inventario multi-tienda para dos zapaterías familiares en Costa Rica (**Zapatería Mariana** y **Zapatería Dali**). Cada tienda maneja su propio inventario, ventas, clientes y proveedores; un usuario `admin` ve ambas tiendas y sus analíticas combinadas.
+**Internal CRM and multi-store inventory system for two family-owned shoe stores in Costa Rica** (*Zapatería Mariana* and *Zapatería Dali*). In daily production use.
 
-El acceso es **solo por invitación** — no existe registro público. Los usuarios se crean desde el dashboard de Supabase.
+🔗 **Live:** [calzatrack.vercel.app](https://calzatrack.vercel.app) *(invite-only)*
 
-## Módulos
+Each store manages its own inventory, sales, clients and suppliers; an `admin` user sees both stores and their combined analytics.
 
-| Módulo | Ruta | Descripción |
+Access is **invite-only** — there is no public sign-up. Users are created from the Supabase dashboard.
+
+## Highlights
+
+- **Security in the database, not the UI:** Postgres Row-Level Security scopes every table by store and role.
+- **Transactional sales:** a single RPC validates role/store, recalculates prices server-side, locks stock with `FOR UPDATE` and writes the sale atomically.
+- **Thermal receipt printing from the browser** over WebUSB (ESC/POS), plus PDF export.
+- **Automatic nightly cash-register close** scheduled with `pg_cron`.
+- **CI/CD:** lint, tests and build on every PR; database migrations applied automatically by GitHub Actions; Vercel deploys.
+
+## Modules
+
+| Module | Route | Description |
 |---|---|---|
-| Dashboard | `/` | KPIs del día, notas de tienda (pizarra de post-its) |
-| Inventario | `/inventory` | Productos con variantes (talla/color/SKU), stock por tienda, ofertas, importación masiva |
-| Ventas | `/sales` | Ventas de contado con categoría, descuento e impresión de tiquete |
-| Apartados | `/layaways` | Reservas con abonos parciales (descuentan stock al crearse) |
-| Créditos | `/credits` | Ventas a crédito a clientes registrados, control de morosidad |
-| Clientes | `/clients` | Directorio de clientes por tienda |
-| Empleados | `/employees` | Catálogo de personal (quién atendió la venta) + usuarios con login |
-| Proveedores | `/suppliers` | Directorio de proveedores por tienda |
-| Compras | `/purchases` | Órdenes de compra con líneas de texto libre y foto de la factura |
-| Analíticas | `/analytics` | Comparativo de ventas, tendencias, stock bajo (admin/owner) |
-| Reportes | `/reports` | Cierres de caja manuales y automáticos (pg_cron a medianoche CR) |
+| Dashboard | `/` | Daily KPIs, store notes (sticky-note board) |
+| Inventory | `/inventory` | Products with variants (size/color/SKU), per-store stock, sale prices, bulk import |
+| Sales | `/sales` | Cash sales with category, discount and receipt printing |
+| Layaways | `/layaways` | Reservations with partial payments (stock is deducted on creation) |
+| Credits | `/credits` | Credit sales to registered clients, overdue tracking |
+| Clients | `/clients` | Per-store client directory |
+| Employees | `/employees` | Staff catalog (who handled each sale) + users with login |
+| Suppliers | `/suppliers` | Per-store supplier directory |
+| Purchases | `/purchases` | Purchase orders with free-text lines and a photo of the invoice |
+| Analytics | `/analytics` | Sales comparison, trends, low stock (admin/owner) |
+| Reports | `/reports` | Manual and automatic cash-register closings (pg_cron at Costa Rica midnight) |
 
-Extras: impresión directa de tiquetes en impresoras térmicas ESC/POS vía **WebUSB** (requiere Chrome o Edge) y exportación a PDF con jsPDF.
+> The UI is in Spanish for the stores' staff; code, files and routes are in English.
 
 ## Stack
 
-| Capa | Tecnología |
+| Layer | Technology |
 |---|---|
 | Frontend | React 18 + TypeScript (strict) + Vite 5 |
 | Routing | React Router v6 |
-| Estilos | Tailwind CSS v3 (paleta `brand` morada) |
-| Estado servidor | TanStack Query v5 |
-| Estado cliente | Zustand (con persistencia parcial) |
-| Formularios | React Hook Form + Zod |
+| Styling | Tailwind CSS v3 (purple `brand` palette) |
+| Server state | TanStack Query v5 |
+| Client state | Zustand (with partial persistence) |
+| Forms | React Hook Form + Zod |
 | Backend | Supabase (Postgres 17 + Auth + RLS + Storage + pg_cron) |
-| Gestor de paquetes | pnpm |
+| Package manager | pnpm |
 
-## Requisitos
+## Requirements
 
-- Node.js 18+ y [pnpm](https://pnpm.io) (`npm i -g pnpm`)
-- Un proyecto de [Supabase](https://supabase.com)
-- Chrome o Edge si se usa la impresora térmica (WebUSB no existe en Firefox/Safari)
+- Node.js 18+ and [pnpm](https://pnpm.io) (`npm i -g pnpm`)
+- A [Supabase](https://supabase.com) project
+- Chrome or Edge to use the thermal printer (WebUSB is not available in Firefox/Safari)
 
-## Puesta en marcha
+## Getting started
 
-### 1. Instalar dependencias
+### 1. Install dependencies
 
 ```bash
 pnpm install
 ```
 
-### 2. Variables de entorno
+### 2. Environment variables
 
-Copiar `.env.example` a `.env.local` y completar con los datos del proyecto de Supabase (Dashboard → Settings → API):
+Copy `.env.example` to `.env.local` and fill in your Supabase project values (Dashboard → Settings → API):
 
 ```
-VITE_SUPABASE_URL=https://<tu-proyecto>.supabase.co
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon-key>
 ```
 
-> Nunca pongas la `service_role` key en este archivo: todo lo que empieza con `VITE_` se incrusta en el bundle del navegador. `.env.local` está en `.gitignore` y no debe commitearse.
+> Never put the `service_role` key in this file: everything prefixed with `VITE_` is embedded in the browser bundle. `.env.local` is in `.gitignore` and must not be committed.
 
-### 3. Base de datos
+### 3. Database
 
-Aplicar las migraciones de `supabase/migrations/` **en orden** (`001` → `027`). Dos opciones:
+Apply the migrations in `supabase/migrations/` **in order** (`001` → latest). Two options:
 
 ```bash
-# Opción A — Supabase CLI
+# Option A — Supabase CLI
 supabase db push --db-url "postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres"
 
-# Opción B — pegar cada archivo en orden en el SQL Editor del dashboard
+# Option B — paste each file, in order, into the dashboard SQL Editor
 ```
 
-Notas:
+Notes:
 
-- `004_seed.sql` crea las dos tiendas, categorías, marcas y datos de ejemplo. Es requisito mínimo que existan las filas de `tiendas` y `ventas_secuencias` para poder vender.
-- `010_auto_cierre_caja.sql` programa el cierre automático con **pg_cron**. Si la extensión no está habilitada, la migración aplica igual pero sin agendar; habilitar pg_cron en Dashboard → Database → Extensions y luego ejecutar:
+- `004_seed.sql` creates both stores, categories, brands and sample data. At minimum, the `tiendas` and `ventas_secuencias` rows must exist before you can make a sale.
+- `010_auto_cierre_caja.sql` schedules the automatic close with **pg_cron**. If the extension isn't enabled, the migration still applies but nothing is scheduled; enable pg_cron in Dashboard → Database → Extensions and then run:
   ```sql
   SELECT cron.schedule('auto-cierre-caja', '0 6 * * *', 'SELECT auto_cierre_caja()');
   ```
-  (06:00 UTC = medianoche en Costa Rica.)
+  (06:00 UTC = midnight in Costa Rica.)
 
 ### 4. Storage
 
-Crear el bucket `facturas-compra` (Dashboard → Storage) **privado**, para las fotos de facturas de proveedor. La migración `027` deja las políticas correctas (INSERT/SELECT solo para `authenticated`); la app guarda el path del archivo en `compras.factura_imagen_url` y genera URLs firmadas (`createSignedUrl`) al mostrarlo.
+Create a **private** `facturas-compra` bucket (Dashboard → Storage) for supplier invoice photos. Migration `027` sets the correct policies (INSERT/SELECT for `authenticated` only); the app stores the file path in `compras.factura_imagen_url` and generates signed URLs (`createSignedUrl`) to display it.
 
-### 5. Usuarios
+### 5. Users
 
-No hay registro público. Para cada usuario:
+There is no public sign-up. For each user:
 
-1. Dashboard → Authentication → Users → **Invite user** (o Create user).
-2. El trigger `handle_new_user` crea automáticamente su fila en `profiles` con rol `employee`.
-3. Asignar rol y tienda en la tabla `profiles`:
+1. Dashboard → Authentication → Users → **Invite user** (or Create user).
+2. The `handle_new_user` trigger automatically creates their `profiles` row with the `employee` role.
+3. Assign role and store in the `profiles` table:
    ```sql
    UPDATE profiles SET rol = 'owner', tienda_id = (SELECT id FROM tiendas WHERE prefijo = 'MAR')
-   WHERE id = '<uuid-del-usuario>';
+   WHERE id = '<user-uuid>';
    ```
-   - `admin`: ve ambas tiendas (deja `tienda_id` en NULL)
-   - `owner` / `employee`: requieren `tienda_id`
+   - `admin`: sees both stores (leave `tienda_id` NULL)
+   - `owner` / `employee`: require a `tienda_id`
 
-Importante — ajustes de seguridad en Authentication:
+Important — security settings in Authentication:
 
-- Mantener **deshabilitado el signup público** (Sign In / Up), ya que cualquier cuenta creada obtiene sesión `authenticated`.
-- Activar **Leaked Password Protection** (Passwords → Prevent use of compromised passwords).
+- Keep **public sign-up disabled** (Sign In / Up), since any account created gets an `authenticated` session.
+- Enable **Leaked Password Protection** (Passwords → Prevent use of compromised passwords).
 
-### 6. Correr la app
+### 6. Run the app
 
 ```bash
 pnpm dev        # http://localhost:5173
@@ -112,23 +124,23 @@ pnpm dev        # http://localhost:5173
 ## Scripts
 
 ```bash
-pnpm dev        # servidor de desarrollo
-pnpm build      # verificación de TypeScript + build de producción (dist/)
-pnpm preview    # sirve el build de producción localmente
+pnpm dev        # development server
+pnpm build      # TypeScript check + production build (dist/)
+pnpm preview    # serve the production build locally
 pnpm lint       # ESLint
 ```
 
-## Roles y permisos
+## Roles and permissions
 
-| Rol | Acceso |
+| Role | Access |
 |---|---|
-| `admin` | Ambas tiendas, gestión completa, analíticas globales, único que puede borrar ventas/pagos/empleados |
-| `owner` | Su tienda: inventario, ventas, clientes, empleados, compras, analíticas de su tienda |
-| `employee` | Su tienda: inventario y creación de ventas; la UI le oculta empleados/analíticas |
+| `admin` | Both stores, full management, global analytics; the only role that can delete sales/payments/employees |
+| `owner` | Their store: inventory, sales, clients, employees, purchases, store analytics |
+| `employee` | Their store: inventory and creating sales; the UI hides employees/analytics |
 
-La seguridad real vive en **RLS** (`supabase/migrations/002_rls.sql` y posteriores): las políticas filtran por `tienda_id` del perfil del usuario (`auth_tienda_id()`) y por rol (`auth_role()`). Los checks `isAdmin` / `canManage` del hook `useAuth` son solo de conveniencia para la UI y no deben tratarse como frontera de seguridad.
+The real security lives in **RLS** (`supabase/migrations/002_rls.sql` and later): policies filter by the user profile's `tienda_id` (`auth_tienda_id()`) and by role (`auth_role()`). The `isAdmin` / `canManage` checks in the `useAuth` hook are UI conveniences only and must not be treated as a security boundary.
 
-## Estructura
+## Project structure
 
 ```
 src/
@@ -143,40 +155,41 @@ src/
 │   ├── reports/     # CierreCajaModal
 │   └── clients/     # ClientModal
 ├── hooks/           # useAuth, usePrinter (WebUSB), useEmployees...
-├── lib/             # supabase.ts (cliente singleton), utils.ts (cn, formatCRC...)
-├── pages/           # una carpeta por ruta
+├── lib/             # supabase.ts (singleton client), utils.ts (cn, formatCRC...)
+├── pages/           # one folder per route
 ├── store/           # authStore (Zustand)
-├── types/           # tipos compartidos + web-usb.d.ts
-└── utils/           # escpos.ts (generación de tiquetes ESC/POS)
+├── types/           # shared types + web-usb.d.ts
+└── utils/           # escpos.ts (ESC/POS receipt generation)
 supabase/
-└── migrations/      # SQL numerado 001–024 (nunca editar una migración aplicada)
+└── migrations/      # numbered SQL migrations (never edit one that's been applied)
 ```
 
-## Modelo de datos (resumen)
+## Data model (summary)
 
-- **productos** (por tienda) → **variantes_producto** (talla/color/SKU/precio/costo/oferta, con `tienda_id` propio desde la 025; SKU único por tienda) → **inventario_tienda** (stock por tienda y variante).
-- **ventas** tiene `tipo` (`contado` | `apartado` | `credito`) y `estado` (`pendiente` | `pagada` | `anulada`); las líneas van en **detalle_ventas** y los abonos en **pagos_venta**.
-- Las ventas se crean con la RPC transaccional **`crear_venta`** (migración 026): valida rol/tienda, recalcula precios desde la BD, bloquea stock con `FOR UPDATE` y crea número + encabezado + líneas + pago inicial en una sola transacción.
-- Números de venta correlativos por tienda: `MAR-00001`, `DAL-00001` (`get_next_numero_venta` sobre `ventas_secuencias`).
-- Stock: se descuenta al crear la venta (los tres tipos); anular restaura (trigger `trg_stock_on_venta`).
-- **cierres_caja** guarda snapshots agregados (por método de pago, categoría y empleado) y son inmutables (solo admin puede editarlos). Tras un cierre, las ventas capturadas se marcan `archivado = true` — el detalle se conserva como respaldo contable.
-- **clientes** y **proveedores** son por tienda desde la migración 024.
-- El `impuesto` se registra en 0: los precios de venta son IVA-incluido y no se desglosa en el tiquete.
+- **productos** (per store) → **variantes_producto** (size/color/SKU/price/cost/sale price, with its own `tienda_id` since 025; SKU unique per store) → **inventario_tienda** (stock per store and variant).
+- **ventas** has a `tipo` (`contado` cash | `apartado` layaway | `credito` credit) and an `estado` (`pendiente` | `pagada` | `anulada`); line items live in **detalle_ventas** and payments in **pagos_venta**.
+- Sales are created through the transactional **`crear_venta`** RPC (migration 026): it validates role/store, recalculates prices from the database, locks stock with `FOR UPDATE` and creates the number, header, lines and initial payment in a single transaction.
+- Sequential sale numbers per store: `MAR-00001`, `DAL-00001` (`get_next_numero_venta` over `ventas_secuencias`).
+- Stock is deducted when a sale is created (all three types); voiding a sale restores it (`trg_stock_on_venta` trigger).
+- **cierres_caja** stores aggregated snapshots (by payment method, category and employee) and is immutable (only admin can edit). After a close, the captured sales are marked `archivado = true` — details are kept as an accounting record.
+- **clientes** and **proveedores** are per store since migration 024.
+- `impuesto` is recorded as 0: sale prices include VAT and it isn't broken out on the receipt.
 
 ## CI/CD
 
-`.github/workflows/migrate.yml` aplica automáticamente las migraciones nuevas al hacer push a `main` que toque `supabase/migrations/**`. Requiere el secret **`SUPABASE_DB_URL`** (connection string de la BD) en GitHub → Settings → Secrets and variables → Actions.
+- `.github/workflows/ci.yml` runs lint, tests and build on every PR and on pushes to `main`/`develop`. Vercel deploys (`main` → Production, `develop`/PRs → Preview).
+- `.github/workflows/migrate.yml` automatically applies new migrations on pushes to `main` that touch `supabase/migrations/**`. It requires the **`SUPABASE_DB_URL`** secret (database connection string) in GitHub → Settings → Secrets and variables → Actions.
 
-Para desplegar el frontend basta con servir `dist/` (Vercel, Netlify, etc.) definiendo las dos variables `VITE_*` en el entorno de build.
+To deploy the frontend elsewhere, serve `dist/` (Vercel, Netlify, etc.) with the two `VITE_*` variables set in the build environment.
 
-## Impresora térmica
+## Thermal printer
 
-El botón "Conectar impresora" del sidebar usa WebUSB: al autorizar una impresora ESC/POS una vez, Chrome/Edge la recuerda y la app se reconecta sola al iniciar. Los tiquetes de venta y de cierre de caja se generan en `src/utils/escpos.ts`.
+The "Conectar impresora" (Connect printer) button in the sidebar uses WebUSB: once an ESC/POS printer is authorized, Chrome/Edge remembers it and the app reconnects automatically on startup. Sale and cash-close receipts are generated in `src/utils/escpos.ts`.
 
-## Convenciones de código
+## Code conventions
 
-- Componentes funcionales con named exports; tipos en `src/types/index.ts`.
-- Datos siempre vía TanStack Query (nunca `useEffect` + fetch); mutaciones invalidan sus query keys.
-- Tailwind puro con `cn()` para clases condicionales; controles de formulario compartidos de `src/components/ui/`.
-- Archivos/carpetas/rutas en inglés; textos de UI en español.
-- Commits: `type(scope): descripción` (ej. `feat(inventory): add product search filter`).
+- Functional components with named exports; types in `src/types/index.ts`.
+- Data always goes through TanStack Query (never `useEffect` + fetch); mutations invalidate their query keys.
+- Plain Tailwind with `cn()` for conditional classes; shared form controls from `src/components/ui/`.
+- Files/folders/routes in English; UI text in Spanish.
+- Commits: `type(scope): description` (e.g. `feat(inventory): add product search filter`).
